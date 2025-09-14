@@ -2,6 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../lib/nextAuthOptions';
+import SignOutButton from '../components/SignOutButton';
 
 export default async function Home() {
   const session = await getServerSession(authOptions as any);
@@ -20,9 +21,7 @@ export default async function Home() {
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Dashboard (placeholder)</h1>
       <p>Próximamente: resumen semanal.</p>
-      <form action="/api/auth/logout" method="post">
-        <button className="text-sm text-red-600 underline">Logout</button>
-      </form>
+      <SignOutButton />
     </div>
   );
 }

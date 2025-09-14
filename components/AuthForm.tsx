@@ -1,5 +1,6 @@
 "use client";
 import React, { useState } from 'react';
+import { signIn } from 'next-auth/react';
 
 interface Props {
   mode: 'login' | 'register';
@@ -19,13 +20,16 @@ export const AuthForm: React.FC<Props> = ({ mode, onSuccess }) => {
     setLoading(true);
     try {
       if (mode === 'register') {
-        const res = await fetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ email, password, name }) });
-        if (!res.ok) throw new Error('Error registrando');
+        const res = await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password, name }) });
+        if (!res.ok) {
+          const j = await res.json().catch(()=>({}));
+            throw new Error(j.error || 'Error registrando');
+        }
       }
-      const resLogin = await fetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
-      if (!resLogin.ok) throw new Error('Credenciales inválidas');
+      const result = await signIn('credentials', { redirect: false, email, password });
+      if (result?.error) throw new Error(result.error || 'Credenciales inválidas');
       onSuccess?.();
-      window.location.href = '/';
+      window.location.replace('/');
     } catch (err: any) {
       setError(err.message);
     } finally {
