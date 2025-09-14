@@ -67,7 +67,11 @@ model ScheduleSegment {
   logs           TimeLog[]
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+  // Validity range for historical snapshotting (week-based interpretation)
+  effectiveFrom  DateTime  @default(now()) // interpreted as Monday (start of validity)
+  effectiveTo    DateTime? // null => open-ended
   @@index([userId, weekday])
+  @@index([userId, effectiveFrom, effectiveTo])
 }
 
 model TimeLog {

@@ -10,6 +10,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "seed": "tsx prisma/seed.ts"
+    ,"fix:timestamps": "ts-node -P tsconfig.scripts.json scripts/fixLocalTimestamps.ts"
   },
   "dependencies": {
     "@prisma/client": "latest",

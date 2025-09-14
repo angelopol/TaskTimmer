@@ -1,6 +1,7 @@
 "use client";
-import React, { useEffect, useMemo, useState } from 'react';
-import { minutesToHHMM, hhmmToMinutes, WEEKDAY_NAMES_SHORT, isoDate, combineDateAndTime } from '../../lib/time';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { minutesToHHMM, hhmmToMinutes, WEEKDAY_NAMES_SHORT, isoDate, combineDateAndTime, mondayOf } from '../../lib/time';
+import { useWeek } from '../week/WeekContext';
 
 interface Activity { id: string; name: string; color: string | null; }
 interface Segment { id: string; weekday: number; startMinute: number; endMinute: number; activityId: string | null; notes: string | null; activity?: Activity | null; }
@@ -9,7 +10,26 @@ const SOURCES = ['PLANNED','ADHOC','MAKEUP'] as const;
 
 type Source = typeof SOURCES[number];
 
+// Small reusable banner showing the active week range derived from weekStart (Monday) -> Sunday
+function ActiveWeekBanner({ weekStart }: { weekStart: string }){
+  // compute Sunday
+  const [y,m,d] = weekStart.split('-').map(Number);
+  const monday = new Date(y, m-1, d, 0,0,0,0);
+  const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate()+6, 0,0,0,0);
+  const pad = (n:number)=> n.toString().padStart(2,'0');
+  const endLabel = `${pad(sunday.getDate())}/${pad(sunday.getMonth()+1)}`;
+  const startLabel = `${pad(monday.getDate())}/${pad(monday.getMonth()+1)}`;
+  return (
+    <div className="flex items-center gap-2 text-xs px-3 py-2 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40">
+      <span className="font-medium">Active Week:</span>
+      <span className="font-mono">{startLabel} – {endLabel}</span>
+      <span className="text-[10px] text-gray-500 dark:text-gray-400">(Mon→Sun)</span>
+    </div>
+  );
+}
+
 export default function LogTimeForm(){
+  const { weekStart, setWeekStart, gotoPrevWeek, gotoNextWeek, gotoThisWeek } = useWeek();
   const todayISO = isoDate(new Date());
   const [date, setDate] = useState(todayISO);
   const [start, setStart] = useState('09:00');
@@ -49,6 +69,35 @@ export default function LogTimeForm(){
     return true;
   });
   const [userEditedTime, setUserEditedTime] = useState(false);
+  const [loadCount, setLoadCount] = useState(0); // debug counter for loadAll executions
+  const lastLoadedWeekRef = useRef<string | null>(null); // last fully loaded weekStart
+  const loadingWeekRef = useRef<string | null>(null); // week currently in-flight
+
+  // Prevent ping-pong updates between date and weekStart
+  const lastSyncRef = useRef<{ date?: string; weekStart?: string }>({});
+  // When date changes, align weekStart if needed
+  useEffect(()=>{
+    const monday = mondayOf(date);
+    if(monday !== weekStart){
+      if(lastSyncRef.current.date === date && lastSyncRef.current.weekStart === weekStart){
+        return; // already processed this combination
+      }
+      lastSyncRef.current = { date, weekStart };
+      setWeekStart(monday);
+    }
+  }, [date, weekStart, setWeekStart]);
+
+  // When weekStart changes, ensure date is within that week (otherwise set to monday)
+  useEffect(()=>{
+    const currentMonday = mondayOf(date);
+    if(currentMonday !== weekStart){
+      if(lastSyncRef.current.date === date && lastSyncRef.current.weekStart === weekStart){
+        return; // already adjusted
+      }
+      lastSyncRef.current = { date: weekStart, weekStart };
+      setDate(weekStart);
+    }
+  }, [weekStart, date]);
 
   function resetToSegmentTimes(){
     if(!segmentId) return;
@@ -60,30 +109,56 @@ export default function LogTimeForm(){
   }
 
   async function loadAll(){
+    // Prevent starting a new load if the exact same week is already in-flight
+    if(loadingWeekRef.current === weekStart){
+      return;
+    }
+    loadingWeekRef.current = weekStart;
     setLoading(true); setError(null);
-    try {
-      const qs = new URLSearchParams();
-      qs.set('limit', String(limit));
-      qs.set('offset', String(offset));
-      if(filterActivity) qs.set('activityId', filterActivity);
-      if(filterSource) qs.set('source', filterSource);
-      if(order) qs.set('order', order);
-      const [actRes, segRes, logsRes] = await Promise.all([
-        fetch('/api/activities').then(r=>r.json()),
-        fetch('/api/schedule/segments').then(r=>r.json()),
-        fetch('/api/logs?'+qs.toString()).then(r=>r.json())
-      ]);
-      if(actRes.error) throw new Error(actRes.error);
-      if(segRes.error) throw new Error(segRes.error);
-      if(logsRes.error) throw new Error(logsRes.error);
-      setActivities(actRes.activities || []);
-      setSegments(segRes.segments || []);
+    setLoadCount(c=>c+1);
+    const qs = new URLSearchParams();
+    qs.set('limit', String(limit));
+    qs.set('offset', String(offset));
+    if(filterActivity) qs.set('activityId', filterActivity);
+    if(filterSource) qs.set('source', filterSource);
+    if(order) qs.set('order', order);
+    // weekStart basado en la fecha seleccionada para que siempre veas la semana de esa fecha
+  qs.set('weekStart', weekStart);
+    const [actResRaw, segResRaw, logsResRaw] = await Promise.all([
+      fetch('/api/activities').catch(e=>e),
+      fetch('/api/schedule/segments').catch(e=>e),
+      fetch('/api/logs?'+qs.toString()).catch(e=>e)
+    ]);
+    let actRes: any = null, segRes: any = null, logsRes: any = null;
+    const problems: string[] = [];
+    try { if(actResRaw instanceof Response){ actRes = await actResRaw.json(); } else { problems.push('activities fetch failed'); } } catch { problems.push('activities parse failed'); }
+    try { if(segResRaw instanceof Response){ segRes = await segResRaw.json(); } else { problems.push('segments fetch failed'); } } catch { problems.push('segments parse failed'); }
+    try { if(logsResRaw instanceof Response){ logsRes = await logsResRaw.json(); } else { problems.push('logs fetch failed'); } } catch { problems.push('logs parse failed'); }
+    // Set partial data even if others failed
+    if(actRes && !actRes.error){ setActivities(actRes.activities || []); } else if(actRes?.error){ problems.push(`activities: ${actRes.error}`); }
+    if(segRes && !segRes.error){ setSegments(segRes.segments || []); } else if(segRes?.error){ problems.push(`segments: ${segRes.error}`); }
+    if(logsRes && !logsRes.error){
       setRecentLogs(logsRes.logs || []);
       setTotalLogs(logsRes.total || 0);
-    } catch(e:any){ setError(e.message || 'Load failed'); }
-    finally { setLoading(false); }
+    } else if(logsRes?.error){ problems.push(`logs: ${logsRes.error}`); }
+    if(!actRes && !segRes && !logsRes){
+      setError('All requests failed');
+    } else if(problems.length){
+      setError(problems.join(' | '));
+    } else {
+      setError(null);
+    }
+    // Mark week loaded (only after finishing; even if partial errors we consider it attempted)
+    lastLoadedWeekRef.current = weekStart;
+    loadingWeekRef.current = null;
+    setLoading(false);
   }
-  useEffect(()=>{ loadAll(); }, [limit, offset, filterActivity, filterSource, order]);
+  useEffect(()=>{ loadAll(); }, [limit, offset, filterActivity, filterSource, order, date]);
+  // Always attempt to load when weekStart changes (guard inside loadAll prevents redundant in-flight duplicates)
+  useEffect(()=>{ if(lastLoadedWeekRef.current !== weekStart){ loadAll(); } }, [weekStart]);
+
+  // Al cambiar la fecha, reiniciar offset a 0 (nueva semana)
+  useEffect(()=>{ setOffset(0); }, [date]);
 
   // Listen for external creation events (e.g., from WeeklyScheduleTable modal)
   useEffect(()=>{
@@ -255,7 +330,24 @@ export default function LogTimeForm(){
 
   return (
   <div className="space-y-6">
-      <h1 className="text-lg font-semibold">Log Time</h1>
+      {/* Active week banner */}
+      <ActiveWeekBanner weekStart={weekStart} />
+      <div className="flex items-center gap-3">
+        <h1 className="text-lg font-semibold mr-auto">Log Time</h1>
+        <div className="flex items-center gap-1 text-[10px]">
+          <button type="button" onClick={()=>{ gotoPrevWeek(); }} className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">◀</button>
+          <button type="button" onClick={()=>{ gotoThisWeek(); setDate(isoDate(new Date())); }} className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">Hoy</button>
+          <button type="button" onClick={()=>{ gotoNextWeek(); }} className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">▶</button>
+        </div>
+        <span className="text-[10px] px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 select-none">load#{loadCount}</span>
+        {loading && (
+          <span className="inline-flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400 select-none">
+            <span className="w-3 h-3 border-2 border-gray-400 dark:border-gray-500 border-t-transparent rounded-full animate-spin" />
+            loading…
+          </span>
+        )}
+        <button type="button" onClick={()=>loadAll()} className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50" disabled={loading}>Reload</button>
+      </div>
       {error && <div className="text-sm text-red-600">{error}</div>}
       {loading && <div className="text-sm">Loading...</div>}
       <div className="grid gap-8 md:grid-cols-2 items-start">
@@ -280,6 +372,9 @@ export default function LogTimeForm(){
                 <option value="">-- None --</option>
                 {activities.map(a=> <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
+              {!activities.length && !loading && !error && (
+                <div className="text-[10px] text-amber-600 mt-1">No activities loaded. Create one in Activities page.</div>
+              )}
             </label>
             <label className="space-y-1 col-span-2 sm:col-span-3">
               <span className="block text-[11px] uppercase tracking-wide text-gray-500 flex items-center gap-2">Segment <span className="text-[10px] font-normal text-gray-400">(optional)</span></span>
@@ -383,29 +478,44 @@ export default function LogTimeForm(){
             </div>
           </div>
           <div className="space-y-1 text-xs max-h-[520px] overflow-auto pr-1">
-            {recentLogs.map(l => (
-              <div key={l.id} className={`flex flex-wrap gap-2 items-center border border-gray-200 dark:border-gray-700 rounded px-2 py-1 bg-white dark:bg-gray-900 ${editingLogId===l.id ? 'ring-1 ring-blue-400' : ''}`}>
-                <span className="font-mono">{l.startedAt.substring(11,16)}-{l.endedAt.substring(11,16)}</span>
-                <span className="text-[10px] text-gray-500">{Math.round((new Date(l.endedAt).getTime()-new Date(l.startedAt).getTime())/60000)}m</span>
-                {l.source !== 'PLANNED' && <span className="px-1 rounded bg-gray-100 dark:bg-gray-800">{l.source}</span>}
-                {l.partial && <span className="text-amber-600">partial</span>}
-                {l.comment && <span className="truncate max-w-[160px] text-gray-500">{l.comment}</span>}
-                <div className="ml-auto flex gap-1">
-                  {pendingDeleteId === l.id ? (
-                    <>
-                      <button onClick={()=>removeLog(l.id)} className="px-1 text-xs text-red-700 bg-red-100 dark:bg-red-900/40 rounded">Confirm?</button>
-                      <button onClick={()=>setPendingDeleteId(null)} className="px-1 text-xs rounded hover:bg-gray-100 dark:hover:bg-gray-800">Cancel</button>
-                    </>
-                  ) : (
-                    <>
-                      <button onClick={()=>startEdit(l)} className="px-1 text-xs rounded hover:bg-gray-100 dark:hover:bg-gray-800">Edit</button>
-                      <button onClick={()=>removeLog(l.id)} className="px-1 text-xs text-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900/30">Del</button>
-                    </>
+            {recentLogs.map(l => {
+              const act = l.activity as Activity | undefined;
+              return (
+                <div key={l.id} className={`flex flex-wrap gap-2 items-center border border-gray-200 dark:border-gray-700 rounded px-2 py-1 bg-white dark:bg-gray-900 ${editingLogId===l.id ? 'ring-1 ring-blue-400' : ''}`}>
+                  <span className="font-mono">{l.startedAt.substring(11,16)}-{l.endedAt.substring(11,16)}</span>
+                  <span className="text-[10px] text-gray-500">{Math.round((new Date(l.endedAt).getTime()-new Date(l.startedAt).getTime())/60000)}m</span>
+                  {act && (
+                    <span className="inline-flex items-center gap-1 px-1 rounded bg-gray-100 dark:bg-gray-800">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: act.color || '#666' }} />
+                      <span className="text-[11px] leading-none">{act.name}</span>
+                    </span>
                   )}
+                  {l.source !== 'PLANNED' && <span className="px-1 rounded bg-gray-100 dark:bg-gray-800">{l.source}</span>}
+                  {l.partial && <span className="text-amber-600">partial</span>}
+                  {l.comment && <span className="truncate max-w-[160px] text-gray-500">{l.comment}</span>}
+                  <div className="ml-auto flex gap-1">
+                    {pendingDeleteId === l.id ? (
+                      <>
+                        <button onClick={()=>removeLog(l.id)} className="px-1 text-xs text-red-700 bg-red-100 dark:bg-red-900/40 rounded">Confirm?</button>
+                        <button onClick={()=>setPendingDeleteId(null)} className="px-1 text-xs rounded hover:bg-gray-100 dark:hover:bg-gray-800">Cancel</button>
+                      </>
+                    ) : (
+                      <>
+                        <button onClick={()=>startEdit(l)} className="px-1 text-xs rounded hover:bg-gray-100 dark:hover:bg-gray-800">Edit</button>
+                        <button onClick={()=>removeLog(l.id)} className="px-1 text-xs text-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900/30">Del</button>
+                      </>
+                    )}
+                  </div>
                 </div>
+              );
+            })}
+            {recentLogs.length===0 && !loading && (
+              <div className="text-xs text-gray-500">
+                {(filterActivity || filterSource)
+                  ? 'No logs match the selected filters for this week.'
+                  : 'No logs in this week yet.'}
               </div>
-            ))}
-            {recentLogs.length===0 && !loading && <div className="text-xs text-gray-500">No logs yet</div>}
+            )}
           </div>
         </div>
       )}

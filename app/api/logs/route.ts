@@ -35,18 +35,19 @@ const updateSchema = z.object({
   return true;
 }, { message: 'endedAt must be after startedAt', path: ['endedAt'] });
 
-function startOfWeek(date: Date) { // Week Monday-based
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const day = d.getUTCDay(); // 0=Sun
-  const diff = (day === 0 ? -6 : 1 - day); // adjust to Monday
-  d.setUTCDate(d.getUTCDate()+diff);
-  d.setUTCHours(0,0,0,0);
+// Semanas basadas en lunes usando hora LOCAL (no UTC) para evitar desfases timezone
+function startOfWeek(date: Date) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const day = d.getDay(); // 0=Dom .. 6=Sab
+  const diff = (day === 0 ? -6 : 1 - day); // si Domingo retrocede 6, si no (1 - day)
+  d.setDate(d.getDate() + diff);
+  d.setHours(0,0,0,0);
   return d;
 }
 function endOfWeek(date: Date) {
   const s = startOfWeek(date);
   const e = new Date(s);
-  e.setUTCDate(e.getUTCDate()+7);
+  e.setDate(e.getDate()+7); // exclusivo
   return e;
 }
 
@@ -123,6 +124,7 @@ export async function GET(req: Request) {
   const offsetParam = searchParams.get('offset');
   const activityFilter = searchParams.get('activityId');
   const sourceFilter = searchParams.get('source');
+  const noSegment = searchParams.get('noSegment');
   const orderParam = searchParams.get('order');
   let refDate = weekStartParam ? new Date(weekStartParam) : new Date();
   if (isNaN(refDate.getTime())) return NextResponse.json({ error: 'Invalid weekStart' }, { status: 400 });
@@ -131,11 +133,12 @@ export async function GET(req: Request) {
   const where: any = { userId, date: { gte: from, lt: to } };
   if(activityFilter){ where.activityId = activityFilter; }
   if(sourceFilter){ where.source = sourceFilter; }
+  if(noSegment === '1') { where.segmentId = null; }
   const take = limitParam ? Math.min(100, Math.max(1, parseInt(limitParam))) : 20;
   const skip = offsetParam ? Math.max(0, parseInt(offsetParam)) : 0;
   const order: 'asc' | 'desc' = orderParam === 'asc' ? 'asc' : 'desc'; // default desc
   const [logs, total] = await Promise.all([
-    prisma.timeLog.findMany({ where, orderBy: { startedAt: order }, skip, take }),
+    prisma.timeLog.findMany({ where, orderBy: { startedAt: order }, skip, take, include: { activity: { select: { id: true, name: true, color: true } } } }),
     prisma.timeLog.count({ where })
   ]);
   return NextResponse.json({ from, to, logs, total, order });

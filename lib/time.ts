@@ -28,8 +28,38 @@ export function sameDayUTC(a: Date, b: Date){
 
 export function isoDate(date: Date){ return date.toISOString().slice(0,10); }
 
+/**
+ * combineDateAndTime
+ * Crea un timestamp ISO a partir de una fecha (YYYY-MM-DD) y hora (HH:MM) interpretadas en ZONA LOCAL.
+ * Antes: Se usaba Date.UTC -> esto desplazaba horas al guardar si el usuario no estaba en UTC.
+ * Ahora: new Date(y,m-1,d,hh,mm) mantiene la intención local (lo que el usuario selecciona) y luego
+ * se serializa a ISO (que estará en UTC con el offset aplicado automáticamente por toISOString()).
+ * Ejemplo: Local GMT+2 2025-09-09 + 10:00 -> objeto Date local (2025-09-09 10:00+02) -> ISO 2025-09-09T08:00:00.000Z.
+ * Esto asegura que al parsear el ISO y volver a mostrar la hora local se recupere 10:00.
+ */
 export function combineDateAndTime(dateISO: string, timeHHMM: string): string {
-  // Returns ISO string
+  const [y,m,d] = dateISO.split('-').map(Number);
+  const [hh,mm] = timeHHMM.split(':').map(Number);
+  const dt = new Date(y, m-1, d, hh, mm, 0, 0); // local time
+  return dt.toISOString();
+}
+
+// Monday (YYYY-MM-DD) for given local date string.
+export function mondayOf(dateISO: string){
+  const parts = dateISO.split('-').map(Number);
+  if(parts.length!==3) return dateISO;
+  const d = new Date(parts[0], parts[1]-1, parts[2], 0,0,0,0);
+  const day = d.getDay();
+  const diff = (day === 0 ? -6 : 1 - day);
+  d.setDate(d.getDate() + diff);
+  const pad = (n:number)=> n.toString().padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+
+/**
+ * Versión UTC (legacy). Úsala solo si necesitas fijar la hora absoluta sin offset local.
+ */
+export function combineDateAndTimeUTC(dateISO: string, timeHHMM: string): string {
   const [y,m,d] = dateISO.split('-').map(Number);
   const [hh,mm] = timeHHMM.split(':').map(Number);
   const dt = new Date(Date.UTC(y,m-1,d,hh,mm,0,0));
