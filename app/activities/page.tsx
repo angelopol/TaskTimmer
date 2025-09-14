@@ -1,5 +1,5 @@
 import React from 'react';
-import ActivitiesClient from '../../components/activities/ActivitiesClient';
+import ActivitiesClient from '@/components/activities/ActivitiesClient';
 
 export const dynamic = 'force-dynamic';
 

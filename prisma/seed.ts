@@ -13,11 +13,15 @@ async function main() {
     user = await prisma.user.create({ data: { email, passwordHash: '$2b$10$8VcxQsx8XoYf.7O8B9mAnOh9jK8uciFj.t3eztzYLeuk1ECF3F0im', name: 'Demo' } }); // password: demo123
   }
 
-  const activityNames = ['EZPARKING', 'EDITFY', 'EZPASS', 'GIMNASIO', 'UNIVERSIDAD'];
+  const demoSeedFlag = process.env.DEMO_SEED !== 'false';
+  const existingActivities = await prisma.activity.count({ where: { userId: user.id } });
   const activityMap: Record<string,string> = {};
-  for (const name of activityNames) {
-    const act = await prisma.activity.upsert({ where: { userId_name: { userId: user.id, name } }, update: {}, create: { name, userId: user.id, weeklyTargetMinutes: 0 } });
-    activityMap[name] = act.id;
+  if (demoSeedFlag && existingActivities === 0) {
+    const activityNames = ['EZPARKING', 'EDITFY', 'EZPASS', 'GIMNASIO', 'UNIVERSIDAD'];
+    for (const name of activityNames) {
+      const act = await prisma.activity.upsert({ where: { userId_name: { userId: user.id, name } }, update: {}, create: { name, userId: user.id, weeklyTargetMinutes: 0 } });
+      activityMap[name] = act.id;
+    }
   }
 
   // Timetable segments (weekday 1=Monday ..7=Sunday)
@@ -47,17 +51,21 @@ async function main() {
     { range: '21:40-24:00', values: ['LIBRE','LIBRE','LIBRE','LIBRE','LIBRE','LIBRE','LIBRE'] }
   ];
 
-  for (const row of rows) {
-    const [start, end] = row.range.split('-');
-    const startM = hm(start); const endM = hm(end);
-    for (let i=0;i<7;i++) {
-      const val = row.values[i];
-      if (!val) continue;
-      const activityId = val === 'LIBRE' ? null : activityMap[val];
-      await prisma.scheduleSegment.create({ data: { userId: user.id, weekday: i+1, startMinute: startM, endMinute: endM, activityId } });
+  if (Object.keys(activityMap).length > 0) {
+    for (const row of rows) {
+      const [start, end] = row.range.split('-');
+      const startM = hm(start); const endM = hm(end);
+      for (let i=0;i<7;i++) {
+        const val = row.values[i];
+        if (!val) continue;
+        const activityId = val === 'LIBRE' ? null : activityMap[val];
+        await prisma.scheduleSegment.create({ data: { userId: user.id, weekday: i+1, startMinute: startM, endMinute: endM, activityId } });
+      }
     }
+    console.log('Seed complete (demo data inserted)');
+  } else {
+    console.log('Seed complete (no demo data inserted)');
   }
-  console.log('Seed complete');
 }
 
 main().catch(e=>{ console.error(e); process.exit(1); }).finally(()=>prisma.$disconnect());

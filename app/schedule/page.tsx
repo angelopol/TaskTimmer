@@ -1,12 +1,10 @@
-import React from 'react';
-import ScheduleSegmentsClient from '../../components/schedule/ScheduleSegmentsClient';
-
+import ScheduleSwitcher from '../../components/schedule/ScheduleSwitcher';
+import { cookies } from 'next/headers';
 export const metadata = { title: 'Schedule - TaskTimmer' };
 
 export default function SchedulePage(){
-  return (
-    <div>
-      <ScheduleSegmentsClient />
-    </div>
-  );
+  const cookieStore = cookies();
+  const saved = cookieStore.get('schedule_mode')?.value;
+  const initialMode = saved === 'schedule' ? 'schedule' : 'manage';
+  return <ScheduleSwitcher initialMode={initialMode} />;
 }
