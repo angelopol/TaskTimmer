@@ -26,15 +26,31 @@ export async function GET(req: Request){
   let refDate = weekStartParam ? new Date(weekStartParam) : new Date();
   if(isNaN(refDate.getTime())) return NextResponse.json({ error: 'Invalid weekStart' }, { status: 400 });
   const from = startOfWeek(refDate); const to = endOfWeek(refDate);
-  // Aggregate minutes per segment
-  const logs = await prisma.timeLog.groupBy({
-    by: ['segmentId'],
+  // Aggregate minutes per segment & per activity within segment
+  const grouped = await prisma.timeLog.groupBy({
+    by: ['segmentId','activityId'],
     where: { userId, date: { gte: from, lt: to }, segmentId: { not: null } },
     _sum: { minutes: true }
   });
   const usage: Record<string, number> = {};
-  for(const l of logs){ if(l.segmentId) usage[l.segmentId] = l._sum.minutes || 0; }
-  return new NextResponse(JSON.stringify({ from, to, usage }), {
+  const breakdown: Record<string, { activityId: string | null; minutes: number }[]> = {};
+  for(const row of grouped){
+    if(!row.segmentId) continue;
+    const segId = row.segmentId;
+    const mins = row._sum.minutes || 0;
+    usage[segId] = (usage[segId] || 0) + mins;
+    if(!breakdown[segId]) breakdown[segId] = [];
+    breakdown[segId].push({ activityId: row.activityId, minutes: mins });
+  }
+  // Determine dominant (most logged minutes) activity per segment
+  const dominant: Record<string, { activityId: string | null; minutes: number } | null> = {};
+  for(const segId of Object.keys(breakdown)){
+    const arr = breakdown[segId];
+    if(!arr.length){ dominant[segId] = null; continue; }
+    arr.sort((a,b)=> b.minutes - a.minutes);
+    dominant[segId] = arr[0];
+  }
+  return new NextResponse(JSON.stringify({ from, to, usage, breakdown, dominant }), {
     status: 200,
     headers: {
       'Content-Type': 'application/json',

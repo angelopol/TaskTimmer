@@ -32,6 +32,8 @@ export default function WeeklyScheduleTable(){
   const [modalError, setModalError] = useState<string | null>(null);
   const { addToast } = useToast();
   const [segmentLoggedMinutes, setSegmentLoggedMinutes] = useState<Record<string, number>>({});
+  const [segmentDominantActivity, setSegmentDominantActivity] = useState<Record<string,{ activityId: string | null; minutes: number }>>({});
+  const [segmentBreakdown, setSegmentBreakdown] = useState<Record<string,{ activityId: string | null; minutes: number }[]>>({});
   const [usageUpdating, setUsageUpdating] = useState(false);
   const [hasLoadedUsage, setHasLoadedUsage] = useState(false);
 
@@ -48,6 +50,8 @@ export default function WeeklyScheduleTable(){
       const data = await res.json();
       if(res.ok){
         setSegmentLoggedMinutes(data.usage || {});
+  if(data.dominant){ setSegmentDominantActivity(data.dominant); }
+  if(data.breakdown){ setSegmentBreakdown(data.breakdown); }
         setHasLoadedUsage(true);
       }
     } catch {
@@ -80,6 +84,8 @@ export default function WeeklyScheduleTable(){
             const usageData = await usageRes.json();
             if(usageRes.ok){
               setSegmentLoggedMinutes(usageData.usage || {});
+              if(usageData.dominant){ setSegmentDominantActivity(usageData.dominant); }
+              if(usageData.breakdown){ setSegmentBreakdown(usageData.breakdown); }
               setHasLoadedUsage(true);
             }
           } catch {/* ignore usage error on first load */}
@@ -218,18 +224,73 @@ export default function WeeklyScheduleTable(){
                     <td className="px-2 py-1 font-mono text-[11px] sticky left-0 bg-inherit whitespace-nowrap">{label}</td>
                     {Array.from({length:7}, (_,idx)=> idx+1).map(day => {
                       const act = cellActivity(day, r.start, r.end);
+                        const actColor = act.color; // preserve color reference
+                      const segId = act.seg?.id;
+                      const dom = segId ? segmentDominantActivity[segId] : undefined;
+                      const breakdown = segId ? segmentBreakdown[segId] : undefined;
+                      const plannedActivityId = act.seg?.activityId || null;
+                      const multi = breakdown && breakdown.length > 1;
+                      const hasAny = breakdown && breakdown.length > 0;
+                      const dominantDiffers = !!(dom && dom.activityId && plannedActivityId && dom.activityId !== plannedActivityId);
                       const bg = act.name==='LIBRE' ? '' : 'bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 cursor-pointer';
                       return (
                         <td key={day} className={`relative px-2 py-1 whitespace-nowrap ${act.seg ? bg : ''}`}
                           onClick={()=> act.seg && openModal(act.seg)}
                         >
-                          <span className="font-medium" style={ act.color ? { color: act.color } : undefined }>
-                            {act.name}
-                          </span>
+                          {act.seg ? (
+                            hasAny ? (
+                              <div className="flex flex-col gap-0.5">
+                                {plannedActivityId ? (
+                                  <span className={`font-medium ${dominantDiffers || (multi && (!dom || dom.activityId !== plannedActivityId)) ? 'line-through opacity-50' : ''}`} style={ actColor ? { color: actColor } : undefined }>
+                                    {act.name}
+                                  </span>
+                                ) : (
+                                  <span className="font-medium" style={ actColor ? { color: actColor } : undefined }>{act.name}</span>
+                                )}
+                                <div className="flex flex-wrap gap-x-1 gap-y-0.5">
+                                  {breakdown?.map(b => {
+                                    const a = b.activityId ? activities.find(x=>x.id===b.activityId) : null;
+                                    const nm = a ? a.name : '—';
+                                    const pctBase = (act.seg!.endMinute - act.seg!.startMinute) || 1;
+                                    const pct = Math.round((b.minutes / pctBase) * 100);
+                                    const highlight = dom && dom.activityId === b.activityId;
+                                    return (
+                                      <span key={(b.activityId||'none')}
+                                        className={`px-1 py-0.5 rounded text-[9px] border ${highlight ? 'bg-amber-500 text-white border-amber-600' : 'bg-white dark:bg-gray-950 border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300'}`}
+                                        title={`${nm} • ${b.minutes}m (${pct}%)`}
+                                      >{nm} {b.minutes}m ({pct}%)</span>
+                                    );
+                                  })}
+                                  {(() => {
+                                    if(!breakdown || !act.seg) return null;
+                                    const totalLogged = breakdown.reduce((sum,b)=> sum + b.minutes, 0);
+                                    const segDur = act.seg.endMinute - act.seg.startMinute;
+                                    const remaining = segDur - totalLogged;
+                                    if(remaining > 0){
+                                      const pct = Math.round((remaining / segDur) * 100);
+                                      return (
+                                        <span key="__free__" className="px-1 py-0.5 rounded text-[9px] border bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300" title={`Libre • ${remaining}m (${pct}%)`}>
+                                          Libre {remaining}m ({pct}%)
+                                        </span>
+                                      );
+                                    }
+                                    return null;
+                                  })()}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="font-medium" style={ actColor ? { color: actColor } : undefined }>{act.name}</span>
+                            )
+                          ) : (
+                            <span className="font-medium" style={ actColor ? { color: actColor } : undefined }>{act.name}</span>
+                          )}
                           {act.seg && act.seg.activityId && (
                             <span className={`block text-[9px] mt-0.5 text-gray-500 ${usageUpdating ? 'opacity-60' : ''}`}>
                               {!hasLoadedUsage ? '…' : (usageUpdating ? 'updating…' : `${segmentLoggedMinutes[act.seg.id] ? segmentLoggedMinutes[act.seg.id] : 0}m / ${(act.seg.endMinute - act.seg.startMinute)}m`)}
                             </span>
+                          )}
+                          {act.seg && multi && (
+                            <span className="absolute top-0 right-0 translate-y-[-2px] translate-x-[2px] text-[8px] px-1 py-0.5 rounded bg-amber-600 text-white" title="Multiple activities logged in this segment">MULTI</span>
                           )}
                         </td>
                       );
