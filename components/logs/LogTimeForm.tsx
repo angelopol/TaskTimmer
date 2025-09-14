@@ -85,6 +85,19 @@ export default function LogTimeForm(){
   }
   useEffect(()=>{ loadAll(); }, [limit, offset, filterActivity, filterSource, order]);
 
+  // Listen for external creation events (e.g., from WeeklyScheduleTable modal)
+  useEffect(()=>{
+    function handler(){ loadAll(); }
+    if(typeof window !== 'undefined'){
+      window.addEventListener('timelog:created', handler as any);
+    }
+    return ()=>{
+      if(typeof window !== 'undefined'){
+        window.removeEventListener('timelog:created', handler as any);
+      }
+    };
+  }, []);
+
   // Filter segments for selected date's weekday
   const weekday = useMemo(()=>{
     const dt = new Date(date + 'T00:00:00Z');
@@ -165,6 +178,9 @@ export default function LogTimeForm(){
       // Insert into recent logs local list
   // refetch to maintain ordering and counts
   await loadAll();
+      if(typeof window !== 'undefined'){
+        window.dispatchEvent(new CustomEvent('timelog:created'));
+      }
       // Reset minimal fields (keep date to speed input)
       setStart('09:00'); setEnd('10:00'); setPartial(false); setComment(''); setSegmentId('');
     } catch(e:any){ setError(e.message); }
@@ -210,6 +226,9 @@ export default function LogTimeForm(){
       const data = await res.json();
       if(!res.ok) throw new Error(data.error || 'Update failed');
   await loadAll();
+      if(typeof window !== 'undefined'){
+        window.dispatchEvent(new CustomEvent('timelog:created'));
+      }
       setEditingLogId(null);
       setComment('');
     } catch(e:any){ setError(e.message); }
@@ -227,6 +246,9 @@ export default function LogTimeForm(){
       const data = await res.json();
       if(!res.ok) throw new Error(data.error || 'Delete failed');
       await loadAll();
+      if(typeof window !== 'undefined'){
+        window.dispatchEvent(new CustomEvent('timelog:created'));
+      }
       if(editingLogId === id) setEditingLogId(null);
     } catch(e:any){ setError(e.message); }
   }
