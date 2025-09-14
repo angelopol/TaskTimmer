@@ -137,8 +137,8 @@ export default function WeeklyScheduleTable(){
     })();
   }, [weekStart, historicalMode]);
 
-  // (Se declarará el efecto de carga inicial de free logs después de definir rows)
-  const initialFreeLogsLoadedRef = useRef(false);
+  // Ref para prevenir cargas duplicadas de free logs en StrictMode / renders repetidos
+  const lastFreeLogsKeyRef = useRef<string>('');
 
   // When a new log is created elsewhere listen to event to refresh usage map
   useEffect(()=>{
@@ -178,19 +178,14 @@ export default function WeeklyScheduleTable(){
   const [syntheticRows, setSyntheticRows] = useState<{ start:number; end:number; }[]>([]);
   const effectiveRows = rows.length ? rows : syntheticRows; // grid real que se renderiza
 
-  // Cargar free logs inicial tras tener segments/rows
+  // Auto-cargar / recargar free logs cuando cambian segmentos, filas (rows) o la semana
   useEffect(()=>{
-    if(!initialFreeLogsLoadedRef.current){
-      initialFreeLogsLoadedRef.current = true;
-      loadFreeLogs();
-    }
-  }, [segments, rows]);
-  // Re-cargar free logs al cambiar semana explícitamente
-  useEffect(()=>{
-    if(initialFreeLogsLoadedRef.current){
-      loadFreeLogs();
-    }
-  }, [weekStart]);
+    const key = weekStart + '|' + segments.length + '|' + rows.length;
+    if(lastFreeLogsKeyRef.current === key) return; // evita duplicados (e.g., StrictMode)
+    lastFreeLogsKeyRef.current = key;
+    loadFreeLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [segments, rows, weekStart]);
 
   // Map for quick lookup: weekday -> list of segments
   const byDay = useMemo(()=>{
@@ -210,9 +205,10 @@ export default function WeeklyScheduleTable(){
   function weekDateForWeekday(weekday:number){
     // weekday 1..7 Monday..Sunday -> compute date relative to shared weekStart (local Monday)
     const [y,m,d] = weekStart.split('-').map(Number);
-    const monday = new Date(y, m-1, d, 0,0,0,0);
-    const target = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + (weekday-1));
-    return target.toISOString().substring(0,10);
+    const monday = new Date(y, m-1, d, 0,0,0,0); // local midnight Monday
+    const target = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + (weekday-1), 0,0,0,0);
+    const pad = (n:number)=> n.toString().padStart(2,'0');
+    return `${target.getFullYear()}-${pad(target.getMonth()+1)}-${pad(target.getDate())}`; // avoid toISOString to prevent UTC day shift
   }
 
   function getWeekRange(){

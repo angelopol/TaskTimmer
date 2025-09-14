@@ -99,11 +99,20 @@ export async function POST(req: Request) {
     }
   }
 
+  // Parse provided date (YYYY-MM-DD) as LOCAL midnight to avoid UTC shift
+  let dateLocal: Date;
+  const dm = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(data.date);
+  if(dm){
+    const yy = parseInt(dm[1],10), mo = parseInt(dm[2],10)-1, dd = parseInt(dm[3],10);
+    dateLocal = new Date(yy, mo, dd, 0,0,0,0);
+  } else {
+    dateLocal = new Date(data.date);
+  }
   const log = await prisma.timeLog.create({ data: {
     userId,
     activityId: data.activityId || null,
     segmentId: data.segmentId || null,
-    date: new Date(data.date),
+    date: dateLocal,
     startedAt: started,
     endedAt: ended,
     minutes: mins,
@@ -126,6 +135,8 @@ export async function GET(req: Request) {
   const sourceFilter = searchParams.get('source');
   const noSegment = searchParams.get('noSegment');
   const orderParam = searchParams.get('order');
+  const segmentIdFilter = searchParams.get('segmentId');
+  const dateFilter = searchParams.get('date'); // restrict to one calendar day (local)
   // Interpret weekStart as a local-date (YYYY-MM-DD) rather than UTC to avoid off-by-one when user is behind UTC.
   let refDate: Date;
   if(weekStartParam){
@@ -149,6 +160,16 @@ export async function GET(req: Request) {
   if(activityFilter){ where.activityId = activityFilter; }
   if(sourceFilter){ where.source = sourceFilter; }
   if(noSegment === '1') { where.segmentId = null; }
+  if(segmentIdFilter){ where.segmentId = segmentIdFilter; }
+  if(dateFilter){
+    const dm = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(dateFilter);
+    if(dm){
+      const yy = parseInt(dm[1],10), mo = parseInt(dm[2],10)-1, dd = parseInt(dm[3],10);
+      const dayStart = new Date(yy, mo, dd, 0,0,0,0);
+      const dayEnd = new Date(yy, mo, dd+1, 0,0,0,0);
+      where.date = { gte: dayStart, lt: dayEnd };
+    }
+  }
   const take = limitParam ? Math.min(100, Math.max(1, parseInt(limitParam))) : 20;
   const skip = offsetParam ? Math.max(0, parseInt(offsetParam)) : 0;
   const order: 'asc' | 'desc' = orderParam === 'asc' ? 'asc' : 'desc'; // default desc
@@ -183,6 +204,17 @@ export async function PATCH(req: Request){
   }
   const startedAt = data.startedAt ? new Date(data.startedAt) : existing.startedAt;
   const endedAt = data.endedAt ? new Date(data.endedAt) : existing.endedAt;
+  // If updating date, parse local midnight
+  let newDate = existing.date;
+  if(data.date){
+    const dm = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(data.date);
+    if(dm){
+      const yy = parseInt(dm[1],10), mo = parseInt(dm[2],10)-1, dd = parseInt(dm[3],10);
+      newDate = new Date(yy, mo, dd, 0,0,0,0);
+    } else {
+      newDate = new Date(data.date);
+    }
+  }
   if(endedAt.getTime() <= startedAt.getTime()) return NextResponse.json({ error: 'endedAt must be after startedAt' }, { status: 422 });
   const minutes = data.minutes ?? Math.round((endedAt.getTime()-startedAt.getTime())/60000);
   if(minutes <= 0) return NextResponse.json({ error: 'minutes must be > 0' }, { status: 422 });
@@ -209,7 +241,7 @@ export async function PATCH(req: Request){
   const updated = await prisma.timeLog.update({ where: { id }, data: {
     activityId: data.activityId === undefined ? existing.activityId : data.activityId,
     segmentId: data.segmentId === undefined ? existing.segmentId : data.segmentId,
-    date: data.date ? new Date(data.date) : existing.date,
+    date: newDate,
     startedAt,
     endedAt,
     minutes,
