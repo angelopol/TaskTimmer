@@ -20,7 +20,7 @@ async function main() {
     activityMap[name] = act.id;
   }
 
-  // Timetable segments (weekday 1=Lunes ..7=Domingo)
+  // Timetable segments (weekday 1=Monday ..7=Sunday)
   interface Row { range: string; values: (string)[]; }
   const rows: Row[] = [
     { range: '08:50-09:00', values: ['EZPARKING','EDITFY','EZPASS','EZPARKING','EDITFY','LIBRE','LIBRE'] },

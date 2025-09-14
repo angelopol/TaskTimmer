@@ -1,22 +1,22 @@
 // Prisma schema
-// DB por defecto: SQLite (dev) -> fácil, sin servidor.
-// Para usar MySQL:
-//  1. Ajusta .env: DB_PROVIDER="mysql" y define MYSQL_* y DATABASE_URL.
-//  2. Cambia provider a "mysql" abajo o usa env("DB_PROVIDER") con datasource shadow.
-//  3. Ejecuta: npx prisma migrate dev --name init_mysql
-// Ejemplo DATABASE_URL: mysql://user:pass@localhost:3306/tasktimmer
+// Default DB: SQLite (dev) -> lightweight, serverless.
+// To use MySQL:
+//  1. Update .env: DB_PROVIDER="mysql" and define MYSQL_* plus DATABASE_URL.
+//  2. Change provider to "mysql" below or use env("DB_PROVIDER") with a shadow database if needed.
+//  3. Run: npx prisma migrate dev --name init_mysql
+// Example DATABASE_URL: mysql://user:pass@localhost:3306/tasktimmer
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  // Alternativa dinámica: provider = env("DB_PROVIDER") pero requiere Prisma 5.4+.
-  // Si se prefiere cambiar manualmente, sustituye el valor a "mysql".
+  // Dynamic alternative (Prisma >=5.4): provider = env("DB_PROVIDER")
+  // If you prefer manual switching, change to "mysql" here.
   provider = "sqlite"
-  // Para SQLite
+  // SQLite URL
   url      = "file:./dev.db"
-  // Para MySQL (descomentar si alternas manualmente)
+  // MySQL URL (uncomment when switching)
   // url   = env("DATABASE_URL")
 }
 
@@ -60,7 +60,7 @@ model ScheduleSegment {
   userId         String
   activity       Activity? @relation(fields: [activityId], references: [id])
   activityId     String?
-  weekday        Int       // 1=Lunes .. 7=Domingo
+  weekday        Int       // 1=Monday .. 7=Sunday
   startMinute    Int
   endMinute      Int
   notes          String?
