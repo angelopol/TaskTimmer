@@ -57,14 +57,14 @@ export function DashboardWeekly() {
         <h2 className="text-xl font-semibold mb-1">Weekly Dashboard</h2>
         <p className="text-xs text-gray-500">Week {data.weekStart} to {data.weekEndExclusive}</p>
       </header>
-      <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {data.activities.map(a => {
           const pct = a.percent ?? 0;
           const coverage = a.plannedCoveragePercent ?? 0;
           const planned = a.plannedMinutesWeek;
           const sources = Object.entries(a.loggedBySource).sort((x,y)=>y[1]-x[1]);
           return (
-            <div key={a.id} className="border rounded p-3">
+            <div key={a.id} className="border rounded p-3 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 flex flex-col">
               <div className="flex items-center justify-between mb-1">
                 <h3 className="font-medium flex items-center gap-2">
                   <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: a.color || '#999' }} />
@@ -72,7 +72,7 @@ export function DashboardWeekly() {
                 </h3>
                 <span className="text-xs text-gray-500">{a.done} / {a.target} min {a.over>0 && <strong className="text-red-600 ml-1">+{a.over}</strong>}</span>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 mt-1 flex-1">
                 {/* Target progress bar */}
                 <div>
                   <div className="h-2 w-full bg-gray-200 rounded overflow-hidden">

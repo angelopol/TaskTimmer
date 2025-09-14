@@ -88,7 +88,50 @@ export default function ActivitiesClient() {
         <h2 className="font-medium text-sm tracking-wide uppercase text-gray-600 dark:text-gray-300">List</h2>
         {loading && <p>Loading...</p>}
         {error && <p className="text-red-600 text-sm">{error}</p>}
-        <div className="overflow-x-auto">
+        {/* Mobile cards */}
+        <div className="grid gap-2 sm:hidden">
+          {items.map(it => {
+            const editing = editingId === it.id;
+            return (
+              <div key={it.id} className="border border-gray-200 dark:border-gray-700 rounded p-2 bg-white dark:bg-gray-800 text-xs flex flex-col gap-1">
+                <div className="flex items-center justify-between">
+                  {editing ? (
+                    <input value={editData.name} onChange={e=>setEditData(d=>({...d,name:e.target.value}))} className="border dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-900 text-xs" />
+                  ) : (
+                    <span className="flex items-center gap-2 font-medium"><span className="w-3 h-3 rounded-full inline-block" style={{background:it.color||'#999'}} />{it.name}</span>
+                  )}
+                  <span className="text-[10px] text-gray-500">{it.weeklyTargetMinutes}m</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {editing ? (
+                    <input type="color" value={editData.color} onChange={e=>setEditData(d=>({...d,color:e.target.value}))} className="h-7 w-9 p-1 border dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
+                  ) : (
+                    <span className="text-[10px] text-gray-500">{it.color}</span>
+                  )}
+                  {editing ? (
+                    <input type="number" min={0} value={editData.weeklyTargetMinutes} onChange={e=>setEditData(d=>({...d,weeklyTargetMinutes:Number(e.target.value)}))} className="w-20 border dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-900 text-xs" />
+                  ) : null}
+                  <div className="ml-auto flex gap-2">
+                    {editing ? (
+                      <>
+                        <button onClick={()=>saveEdit(it.id)} className="text-blue-600">Save</button>
+                        <button onClick={()=>setEditingId(null)} className="text-gray-500">Cancel</button>
+                      </>
+                    ) : (
+                      <>
+                        <button onClick={()=>startEdit(it)} className="text-blue-600">Edit</button>
+                        <button onClick={()=>remove(it.id)} className="text-red-600">Del</button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {items.length === 0 && !loading && <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-xs">No activities yet.</div>}
+        </div>
+        {/* Desktop table */}
+        <div className="overflow-x-auto hidden sm:block">
           <table className="min-w-full text-sm border-separate border-spacing-y-1">
             <thead>
               <tr className="text-left text-gray-600 dark:text-gray-300">
