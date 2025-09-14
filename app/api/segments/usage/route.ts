@@ -23,7 +23,21 @@ export async function GET(req: Request){
   const userId = (session as any).userId;
   const { searchParams } = new URL(req.url);
   const weekStartParam = searchParams.get('weekStart');
-  let refDate = weekStartParam ? new Date(weekStartParam) : new Date();
+  let refDate: Date;
+  if(weekStartParam){
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(weekStartParam);
+    if(m){
+      const y = parseInt(m[1],10), mo = parseInt(m[2],10)-1, da = parseInt(m[3],10);
+      // Local midnight
+      refDate = new Date(y, mo, da, 0,0,0,0);
+    } else {
+      const tmp = new Date(weekStartParam);
+      if(isNaN(tmp.getTime())) return NextResponse.json({ error: 'Invalid weekStart' }, { status: 400 });
+      refDate = tmp;
+    }
+  } else {
+    refDate = new Date();
+  }
   if(isNaN(refDate.getTime())) return NextResponse.json({ error: 'Invalid weekStart' }, { status: 400 });
   const from = startOfWeek(refDate); const to = endOfWeek(refDate);
   // Aggregate minutes per segment & per activity within segment

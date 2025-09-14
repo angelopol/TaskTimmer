@@ -126,7 +126,22 @@ export async function GET(req: Request) {
   const sourceFilter = searchParams.get('source');
   const noSegment = searchParams.get('noSegment');
   const orderParam = searchParams.get('order');
-  let refDate = weekStartParam ? new Date(weekStartParam) : new Date();
+  // Interpret weekStart as a local-date (YYYY-MM-DD) rather than UTC to avoid off-by-one when user is behind UTC.
+  let refDate: Date;
+  if(weekStartParam){
+    // Manually parse parts to construct local midnight
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(weekStartParam);
+    if(m){
+      const y = parseInt(m[1],10); const mo = parseInt(m[2],10)-1; const da = parseInt(m[3],10);
+      refDate = new Date(y, mo, da, 0,0,0,0);
+    } else {
+      const tmp = new Date(weekStartParam);
+      if(isNaN(tmp.getTime())) return NextResponse.json({ error: 'Invalid weekStart' }, { status: 400 });
+      refDate = tmp;
+    }
+  } else {
+    refDate = new Date();
+  }
   if (isNaN(refDate.getTime())) return NextResponse.json({ error: 'Invalid weekStart' }, { status: 400 });
   const from = startOfWeek(refDate);
   const to = endOfWeek(refDate);

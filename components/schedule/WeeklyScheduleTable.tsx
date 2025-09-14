@@ -240,18 +240,9 @@ export default function WeeklyScheduleTable(){
       if(!res.ok){ throw new Error('Failed free logs (weekStart)'); }
       let payload: any = await res.json();
       let logs = Array.isArray(payload.logs) ? payload.logs : [];
-      // Fallback: si viene vacío, intentar sin weekStart (el backend usa la semana actual por defecto)
-      if(logs.length === 0){
-        const res2 = await fetch(`/api/logs?limit=5000&order=asc&ts=${ts}`, { cache: 'no-store' });
-        if(res2.ok){
-          const payload2: any = await res2.json();
-          if(Array.isArray(payload2.logs) && payload2.logs.length){
-            logs = payload2.logs;
-            payload = { fallback:true, originalEmpty:true, ...payload, fallbackPayload: payload2 };
-          }
-        }
-      }
-      const map: Record<string, FreeLogCellData> = {};
+      // Eliminado fallback que mezclaba logs de la semana actual: si no hay logs, se queda vacío.
+  const map: Record<string, FreeLogCellData> = {};
+  const hadAnyLogs = logs.length > 0;
 
       // Si no hay segmentos definidos, construimos filas sintéticas basadas en límites de logs
       if(!segments.length){
