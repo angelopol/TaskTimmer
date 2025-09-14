@@ -1,0 +1,47 @@
+############################
+# Node / Next.js / General #
+############################
+node_modules/
+.next/
+out/
+dist/
+coverage/
+
+# Build / Cache
+*.tsbuildinfo
+.turbo/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors / IDE
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# Env files (keep example)
+.env
+.env.local
+.env.development.local
+.env.production.local
+.env.test.local
+!.env.example
+
+# Prisma / SQLite
+prisma/dev.db
+prisma/dev.db-journal
+.prisma/
+
+# Misc
+.vercel
+*.swp
+*.swo
+
