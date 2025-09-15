@@ -28,15 +28,31 @@ async function buildSizedIcon(sharpBuffer, size){
   console.log('✓', size, '->', out);
 }
 
+/**
+ * Build a maskable icon that actually fills most of the canvas.
+ * Previous version only placed the raw 32x32 SVG with large fixed padding,
+ * resulting in a tiny glyph surrounded by background. Here we:
+ *  - Choose a content ratio (e.g. 0.88 => 88% of full size)
+ *  - Compute uniform padding so important art stays inside the mask safe zone
+ *  - Rasterize + scale the SVG at high density to preserve sharp edges
+ */
 async function buildMaskable(svgBuffer, size){
   const out = path.join(outDir, `icon-maskable-${size}.png`);
-  // Increase padding to ~20% to avoid clipping on aggressive mask shapes
-  const pad = Math.round(size * 0.20);
-  await sharp({ create: { width:size, height:size, channels:4, background:'#111827' } })
-    .composite([{ input: svgBuffer, top: pad, left: pad }])
+  const contentRatio = 0.88; // portion of full size occupied by artwork
+  const contentSize = Math.round(size * contentRatio);
+  const pad = Math.round((size - contentSize) / 2);
+
+  // Render the SVG scaled up to the target content size.
+  const rendered = await sharp(svgBuffer, { density: 1024 })
+    .resize(contentSize, contentSize, { fit: 'contain' })
+    .png()
+    .toBuffer();
+
+  await sharp({ create: { width: size, height: size, channels: 4, background: '#111827' } })
+    .composite([{ input: rendered, top: pad, left: pad }])
     .png({ compressionLevel: 9 })
     .toFile(out);
-  console.log('✓ maskable', size, '->', out);
+  console.log('✓ maskable', size, '->', out, `(content ${(contentRatio*100).toFixed(0)}%)`);
 }
 
 async function run(){

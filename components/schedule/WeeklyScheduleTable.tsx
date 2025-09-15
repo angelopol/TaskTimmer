@@ -63,27 +63,7 @@ export default function WeeklyScheduleTable(){
   // Free (unsegmented) logs per cell map
   const [freeLogsMap, setFreeLogsMap] = useState<Record<string, FreeLogCellData>>({});
   const [loadingFreeLogs, setLoadingFreeLogs] = useState(false);
-  // Removed hover breakdown overlay for free cells; state no longer needed
-  // Debug (explicit opt-in). We compute once and also verify on client after mount.
-  const ENABLE_DEBUG = process.env.NEXT_PUBLIC_ENABLE_DEBUG === '1';
-  const [debugAllowed, setDebugAllowed] = useState(false);
-  useEffect(()=>{
-    // Only enable if bundle flag was 1 AND variable still 1 at runtime
-    if(ENABLE_DEBUG && (process.env.NEXT_PUBLIC_ENABLE_DEBUG === '1')){
-      setDebugAllowed(true);
-    } else {
-      setDebugAllowed(false);
-      if(ENABLE_DEBUG){
-        // Bundle thought it was enabled but runtime check failed (rare). Warn in dev.
-        if(process.env.NODE_ENV !== 'production'){
-          // eslint-disable-next-line no-console
-          console.warn('[DebugUI] Disabled at runtime despite build flag. Check env sync.');
-        }
-      }
-    }
-  },[ENABLE_DEBUG]);
-  const [showDebug, setShowDebug] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<any>(null);
+  // Removed debug functionality (was ENABLE_DEBUG, debugAllowed, showDebug, debugInfo)
   const [includeEmptySegmentsAsFree, setIncludeEmptySegmentsAsFree] = useState(false);
 
   // Restaurar preferencia toggle empty segments from localStorage
@@ -399,16 +379,7 @@ export default function WeeklyScheduleTable(){
         sampleCells: Object.entries(map).slice(0,10).map(([k,v])=> ({ k, total:v.totalMinutes, acts: v.activities.map(a=>({name:a.name,m:a.minutes})) })),
         rawPayload: payload
       };
-      setDebugInfo(diag);
-  if(ENABLE_DEBUG && typeof window!== 'undefined'){
-        // Log detallado en consola para inspección
-        // eslint-disable-next-line no-console
-        console.groupCollapsed('[FreeLogs Debug]');
-        // eslint-disable-next-line no-console
-        console.log(diag);
-        // eslint-disable-next-line no-console
-        console.groupEnd();
-      }
+  // Debug info removed (diag object no longer stored or printed)
     } catch(e){
       // silent for now
     } finally { setLoadingFreeLogs(false); }
@@ -1042,11 +1013,7 @@ export default function WeeklyScheduleTable(){
         {historicalMode && (
           <span className="text-[10px] px-2 py-1 rounded bg-purple-600 text-white">Snapshot: {snapshotInfo || weekStart}</span>
         )}
-        {debugAllowed && (
-          <Button type="button" size="sm" variant="ghost" onClick={()=>setShowDebug(d=>!d)}>
-            {showDebug ? 'Hide debug' : 'Show debug'}
-          </Button>
-        )}
+        {/* Debug toggle removed */}
         <span className="text-[10px] px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 select-none">fetch#{fetchCount}</span>
   <Button type="button" size="sm" variant="secondary" leftIcon={<IconReload size={14} />} onClick={()=>loadFreeLogs()}>Reload free logs</Button>
       </div>
@@ -1255,45 +1222,7 @@ export default function WeeklyScheduleTable(){
           </table>
         </div>
       )}
-      {debugAllowed && showDebug && (
-        <div className="text-[10px] space-y-2 p-3 rounded border border-purple-400/50 bg-purple-50 dark:bg-purple-950/20 dark:border-purple-700">
-          <div className="font-semibold">Free Logs Debug</div>
-          {!debugInfo && <div>No debug info yet (carga free logs primero).</div>}
-          {debugInfo && (
-            <div className="space-y-2">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                <div>Week start: <span className="font-mono">{debugInfo.weekStart}</span></div>
-                <div>Fetched logs: {debugInfo.fetchedLogs}</div>
-                <div>Rows: {debugInfo.rows}</div>
-                <div>Free cells: {debugInfo.freeCells}</div>
-                <div>Cells with data: {debugInfo.cellsWithData}</div>
-                <div>Cell updates: {debugInfo.cellUpdates}</div>
-                <div>Unmatched logs: {debugInfo.unmatchedCount}</div>
-              </div>
-              {debugInfo.unmatchedCount > 0 && (
-                <div>
-                  <div className="font-medium mb-1">Unmatched (primeros 10)</div>
-                  <ul className="list-disc ml-4 space-y-0.5">
-                    {debugInfo.unmatched.map((u:any)=>(
-                      <li key={u.id}>{u.activity || '—'} {u.startedAt} → {u.endedAt} seg:{u.segmentId || '∅'}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {debugInfo.sampleCells?.length > 0 && (
-                <div>
-                  <div className="font-medium mb-1">Sample cells</div>
-                  <ul className="list-disc ml-4 space-y-0.5">
-                    {debugInfo.sampleCells.map((c:any)=>(
-                      <li key={c.k}>{c.k} = {c.total}m [{c.acts.map((a:any)=> `${a.name}:${a.m}m`).join(', ')}]</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      {/* Debug panel removed */}
       {segmentModal}
       {expandModal}
     </div>
