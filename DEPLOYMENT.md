@@ -145,6 +145,7 @@ Commit updated icons + manifest. Test installation (Chrome Lighthouse > PWA).
 | Auth works locally but not prod | Wrong NEXTAUTH_URL | Set to public domain |
 | Old UI after deploy | SW cached assets | Bump cache version in `sw.js` |
 | Seed duplicates | Seeding on every deploy | Keep DEMO_SEED=false in prod |
+| Debug panel visible | NEXT_PUBLIC_ENABLE_DEBUG=1 leaked to prod | Remove the var or set to 0 and redeploy |
 
 ## 13. Future Enhancements
 - Add `prisma generate` + `migrate deploy` as explicit build step via Vercel Project Settings > Build Command.

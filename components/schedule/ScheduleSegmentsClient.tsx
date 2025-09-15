@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTheme } from '../ThemeProvider';
 import { minutesToHHMM, hhmmToMinutes, WEEKDAY_NAMES_SHORT } from '../../lib/time';
 import { useToast } from '../toast/ToastProvider';
@@ -36,6 +37,11 @@ export default function ScheduleSegmentsClient(){
   // Using global toast provider now
   // const [toasts, setToasts] = useState<{id:string; msg:string;}[]>([]);
   const [showFuture, setShowFuture] = useState(true);
+  const [portalEl, setPortalEl] = useState<HTMLElement | null>(null);
+  useEffect(()=>{ setPortalEl(document.body); },[]);
+  useEffect(()=>{
+    if(!editing) return; const prev = document.body.style.overflow; document.body.style.overflow='hidden'; return ()=>{ document.body.style.overflow=prev; };
+  },[editing]);
 
   // Replaced by global toast (addToast)
 
@@ -277,9 +283,9 @@ export default function ScheduleSegmentsClient(){
         </div>
       ))}
 
-      {editing && (
-        <form onSubmit={submit} className="fixed inset-0 bg-black/40 flex items-start justify-center pt-24 z-50">
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded p-4 w-full max-w-md shadow-xl space-y-3">
+      {editing && portalEl && createPortal(
+        <form onSubmit={submit} className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8 bg-black/40 backdrop-blur-sm overflow-y-auto">
+          <div className="relative bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded p-4 w-full max-w-md shadow-xl space-y-3 max-h-[calc(100vh-4rem)] overflow-y-auto">
             <h3 className="font-medium text-sm mb-1">{editing.id ? 'Edit Segment' : 'New Segment'}</h3>
             <div className="grid grid-cols-2 gap-3 text-xs">
               <label className="space-y-1 col-span-2">
@@ -339,8 +345,7 @@ export default function ScheduleSegmentsClient(){
               <Button type="submit" variant="primary" size="sm" disabled={saving} leftIcon={<IconSave className="w-3.5 h-3.5" />} loading={saving}>{saving ? 'Saving' : 'Save'}</Button>
             </div>
           </div>
-        </form>
-      )}
+        </form>, portalEl)}
     </div>
   );
 }
