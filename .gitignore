@@ -45,3 +45,4 @@ prisma/dev.db-journal
 *.swp
 *.swo
 
+.env.production

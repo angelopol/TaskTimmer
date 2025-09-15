@@ -11,13 +11,11 @@ generator client {
 }
 
 datasource db {
-  // Dynamic alternative (Prisma >=5.4): provider = env("DB_PROVIDER")
-  // If you prefer manual switching, change to "mysql" here.
-  provider = "sqlite"
-  // SQLite URL
-  url      = "file:./dev.db"
-  // MySQL URL (uncomment when switching)
-  // url   = env("DATABASE_URL")
+  // Provider must be a literal (Prisma validation forbids env() here). Switch manually when needed.
+  // For SQLite local dev you could temporarily set: provider = "sqlite" and url = "file:./prisma/dev.db".
+  // For production MySQL keep as below and ensure DATABASE_URL is a valid MySQL URL.
+  provider = "mysql"
+  url      = env("DATABASE_URL")
 }
 
 enum TimeLogSource {
