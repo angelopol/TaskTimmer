@@ -2,13 +2,27 @@
 
 International time planning & activity-based time tracking with weekly goals and schedule segments.
 
+> Modernized authentication UI, responsive design system utilities, password strength feedback, toast notifications, and PWA support (installable + offline shell).
+
 ## Tech Stack
 - Next.js 14 (App Router)
 - TypeScript
 - Prisma (SQLite dev, MySQL optional)
 - NextAuth (Credentials)
-- TailwindCSS
-- Zod
+- TailwindCSS (+ custom utility layers for panels, form grid, transitions)
+- Zod (schema validation) & React Hook Form
+- Framer Motion (page transitions)
+
+## Key Features
+- Schedule segments with versioning-ready structure.
+- Activity & time log tracking; weekly progress aggregation.
+- Credentials auth with adjustable session lifetime (remember me logic) using `SHORT_SESSION_HOURS` / `LONG_SESSION_DAYS`.
+- Enhanced Auth UI: unified layout, accessible labels, immediate validation, password strength meter.
+- Toast notification system for success/error feedback.
+- Installable PWA: manifest + service worker (versioned caches, simple offline shell).
+- Icon generation script (`scripts/generate-icons.js`) produces required sizes + maskable icons via Sharp.
+- Design system tokens via Tailwind utility classes (`tt-panel`, `tt-form-grid`, `tt-input`, `tt-badge-*`, transitions, motion-safe variants).
+- Page transitions with Framer Motion respecting reduced motion preferences.
 
 ## Installation
 
@@ -56,6 +70,9 @@ Default: SQLite (local file) for rapid development.
 ## Domain Models
 See `prisma/schema.prisma` for definitions (User, Activity, ScheduleSegment, TimeLog, TimeLogSource enum).
 
+### Schedule Segments & Versioning (Overview)
+Segments define planned activities across the week (1=Mon .. 7=Sun). The schema is structured so future improvements can introduce historical versioning (e.g., retaining past schedule changes) without major breaking changes.
+
 ## Basic Flow
 1. Register or log in with demo account.
 2. Review activities and schedule segments (seed creates a default timetable; weekday 1=Monday .. 7=Sunday).
@@ -74,12 +91,40 @@ LONG_SESSION_DAYS=30
 ```
 Implementation detail: a custom `expTs` (epoch ms) is embedded in the JWT. If current time exceeds it the session is treated as invalid even before NextAuth base `maxAge`.
 
+### Password Strength Meter
+The registration form scores password strength heuristically (length + character diversity). UI displays a colored badge and guidance text updating on each keystroke.
+
+### Validation
+Client-side: Zod schemas + React Hook Form for immediate feedback. Server-side: NextAuth credentials authorize pipeline. All form inputs have associated labels and ARIA attributes for accessibility.
+
+### Toast Notifications
+Success toasts show on login/registration before redirect navigation. Errors surface inline plus (optional) toast for clarity.
+
+## Design System Utilities
+Several cohesive utility classes provide consistent spacing, elevation, and visual rhythm (panels, form grid, inputs, badges). These reduce repetitive Tailwind class strings and encourage a unified look.
+
+## PWA & Icons
+The app registers a service worker (`public/sw.js`) maintaining a versioned cache (e.g., `v3`). When you change caching logic, bump the cache version and redeploy so clients pick up updated assets. The manifest defines standard + maskable icons and example screenshots.
+
+### Regenerating Icons
+1. Place a high-res square source at `public/icon-source.png` (or update script).
+2. Run `node scripts/generate-icons.js` (ensure `sharp` is installed).
+3. Commit generated icons + manifest updates.
+
+## Page Transitions
+`PageTransition` component (Framer Motion) animates route changes while respecting reduced motion (media query). Ensures subtle fade/slide that does not distract.
+
+## Deployment
+For a full Vercel deployment guide (environment variables, MySQL provisioning, Prisma migrate steps, seeding, and PWA considerations) see `DEPLOYMENT.md`.
+
 ## Roadmap / Next Steps
 - Activity & segment management UI enhancements.
 - Editable time logs (update/delete).
 - Improved dashboard visual components (planned vs actual, source breakdown).
 - Validation hardening & error normalization.
 - Tests (unit + integration) and CI configuration.
+- Observability (structured logging, metrics) and performance profiling.
+- Multi-language i18n support.
 
 ## Health Check
 Endpoint: `GET /api/health`
