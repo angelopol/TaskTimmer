@@ -20,7 +20,13 @@ export function Navbar() {
   if (!userId) return null;
   return (
     <nav className="flex flex-wrap items-center gap-4 mb-6 border-b pb-2 text-sm border-gray-200 dark:border-gray-700">
-      <div className="font-semibold mr-4">TaskTimmer</div>
+      <Link href="/" className="flex items-center gap-2 font-semibold mr-4 group">
+        <span className="w-7 h-7 rounded-md overflow-hidden shadow ring-1 ring-black/30 bg-gray-900 group-hover:scale-105 transition-transform">
+          <img src="/icon-clock-pixel.svg" alt="TaskTimmer logo" className="w-full h-full object-contain p-1 select-none" draggable={false} />
+        </span>
+        <span className="tracking-tight text-base">TaskTimmer</span>
+        <span className="sr-only">Home</span>
+      </Link>
       {links.map(l => {
         const active = pathname === l.href;
         return (
