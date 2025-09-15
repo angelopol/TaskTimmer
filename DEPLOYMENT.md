@@ -51,6 +51,7 @@ Production-safe scripts now included in `package.json`:
 |--------|---------|
 | `npm run migrate:deploy` | Applies already-generated migrations to the target DB |
 | `npm run migrate:prod` | Runs `prisma generate` then `prisma migrate deploy` (convenience) |
+| `npm run build:with-migrate` | Runs `migrate:deploy` then `next build` |
 
 Example (PowerShell) applying to a staging database (temporary inline env vars):
 ```powershell
@@ -63,6 +64,24 @@ npm run migrate:deploy
 ```
 
 After the first deploy (migrations applied), subsequent deploys succeed automatically unless new migration files are added. Always generate migrations locally via `npx prisma migrate dev` before committing.
+
+#### Recommended Vercel Configuration
+
+Install Command (leave empty for default) or explicitly:
+```
+npm install
+```
+Build Command:
+```
+npm run build:with-migrate
+```
+Reasoning: `postinstall` already ran `prisma generate`. At build we only apply pending migrations and compile the app.
+
+⚠️ Avoid formatting Install Command like:
+```
+`npm install`, `npm run migrate:prod`
+```
+This is treated as a single invalid shell token and fails with exit code 127.
 
 ### Option A: prisma migrate deploy (recommended)
 1. Ensure all migrations exist locally via `npx prisma migrate dev` (this generates SQL in `prisma/migrations/`).

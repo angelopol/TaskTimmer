@@ -18,16 +18,20 @@ export const AuthForm: React.FC<Props> = ({ mode, onSuccess }) => {
   const [remember, setRemember] = useState(true);
   const { addToast } = useToast();
 
-  const baseSchema = z.object({
+  // Use a discriminated union so TypeScript knows when name exists
+  const loginSchema = z.object({
     email: z.string().email('Email inválido'),
     password: z.string().min(6, 'Mínimo 6 caracteres')
   });
-  const registerSchema = baseSchema.extend({
+  const registerSchema = loginSchema.extend({
     name: z.string().min(2, 'Nombre muy corto').max(60, 'Nombre muy largo')
   });
-  const schema = mode === 'register' ? registerSchema : baseSchema;
 
-  type FormValues = z.infer<typeof schema>;
+  type LoginValues = z.infer<typeof loginSchema>;
+  type RegisterValues = z.infer<typeof registerSchema>;
+  type FormValues = LoginValues | RegisterValues;
+
+  const schema = (mode === 'register' ? registerSchema : loginSchema);
 
   const { register, handleSubmit, formState, watch, reset } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -85,7 +89,7 @@ export const AuthForm: React.FC<Props> = ({ mode, onSuccess }) => {
         <div className="col-span-full">
           <label className="block text-sm font-medium mb-1" htmlFor="name">Name</label>
           <input id="name" className="tt-input w-full" placeholder="Your name" autoComplete="name" {...register('name' as any)} />
-          {errors.name && <p className="mt-1 text-xs text-red-400">{errors.name.message}</p>}
+          {(errors as any).name && <p className="mt-1 text-xs text-red-400">{(errors as any).name.message}</p>}
         </div>
       )}
       <div className="col-span-full">
