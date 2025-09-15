@@ -20,11 +20,11 @@ export const AuthForm: React.FC<Props> = ({ mode, onSuccess }) => {
 
   // Use a discriminated union so TypeScript knows when name exists
   const loginSchema = z.object({
-    email: z.string().email('Email inválido'),
-    password: z.string().min(6, 'Mínimo 6 caracteres')
+    email: z.string().email('Invalid email'),
+    password: z.string().min(6, 'Minimum 6 characters')
   });
   const registerSchema = loginSchema.extend({
-    name: z.string().min(2, 'Nombre muy corto').max(60, 'Nombre muy largo')
+    name: z.string().min(2, 'Name too short').max(60, 'Name too long')
   });
 
   type LoginValues = z.infer<typeof loginSchema>;
