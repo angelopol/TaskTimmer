@@ -71,7 +71,7 @@ export default function LogTimeForm(){
     return true;
   });
   const [userEditedTime, setUserEditedTime] = useState(false);
-  const [loadCount, setLoadCount] = useState(0); // debug counter for loadAll executions
+  // Removed debug load counter (loadCount)
   const lastLoadedWeekRef = useRef<string | null>(null); // last fully loaded weekStart
   const loadingWeekRef = useRef<string | null>(null); // week currently in-flight
 
@@ -117,7 +117,6 @@ export default function LogTimeForm(){
     }
     loadingWeekRef.current = weekStart;
     setLoading(true); setError(null);
-    setLoadCount(c=>c+1);
     const qs = new URLSearchParams();
     qs.set('limit', String(limit));
     qs.set('offset', String(offset));
@@ -341,14 +340,7 @@ export default function LogTimeForm(){
           <button type="button" onClick={()=>{ gotoThisWeek(); setDate(isoDate(new Date())); }} className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">Hoy</button>
           <button type="button" onClick={()=>{ gotoNextWeek(); }} className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">▶</button>
         </div>
-        <span className="text-[10px] px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 select-none">load#{loadCount}</span>
-        {loading && (
-          <span className="inline-flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400 select-none">
-            <span className="w-3 h-3 border-2 border-gray-400 dark:border-gray-500 border-t-transparent rounded-full animate-spin" />
-            loading…
-          </span>
-        )}
-        <button type="button" onClick={()=>loadAll()} className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50" disabled={loading}>Reload</button>
+        {/* Removed load counter badge, spinner inline cluster, and manual Reload button */}
       </div>
       {error && <div className="text-sm text-red-600">{error}</div>}
       {loading && <div className="text-sm">Loading...</div>}
