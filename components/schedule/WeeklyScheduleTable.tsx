@@ -43,6 +43,8 @@ export default function WeeklyScheduleTable(){
   const [modalLogsLoading, setModalLogsLoading] = useState(false);
   const [modalLogsPage, setModalLogsPage] = useState(0);
   const MODAL_LOGS_PAGE_SIZE = 20;
+  // Minimum size (minutes) for showing a free gap inside a segment timeline list.
+  const MIN_GAP_MINUTES = 2;
   const [editingModalLogId, setEditingModalLogId] = useState<string | null>(null);
   const [editModalLogDraft, setEditModalLogDraft] = useState<{ start: string; end: string; activityId: string; source: Source; partial: boolean; comment: string; } | null>(null);
   const [modalLogSaving, setModalLogSaving] = useState(false);
@@ -58,7 +60,7 @@ export default function WeeklyScheduleTable(){
   // Free (unsegmented) logs per cell map
   const [freeLogsMap, setFreeLogsMap] = useState<Record<string, FreeLogCellData>>({});
   const [loadingFreeLogs, setLoadingFreeLogs] = useState(false);
-  const [showFreeKey, setShowFreeKey] = useState<string | null>(null); // mobile toggle for free cell breakdown
+  // Removed hover breakdown overlay for free cells; state no longer needed
   // Debug
   const [showDebug, setShowDebug] = useState(false);
   const IS_DEV = process.env.NODE_ENV !== 'production';
@@ -634,6 +636,41 @@ export default function WeeklyScheduleTable(){
     setEndHHMM(minutesToHHMM(endMin));
   }
 
+  // Build gaps + logs unified timeline for current segment (non-temp)
+  function buildSegmentTimelineWithGaps(){
+    if(!selectedSegment || ('temp' in selectedSegment)) return null;
+    const segStart = selectedSegment.startMinute;
+    const segEnd = selectedSegment.endMinute;
+    const entries = modalLogs.map(l => {
+      const st = new Date(l.startedAt); const et = new Date(l.endedAt);
+      const startMin = st.getHours()*60 + st.getMinutes();
+      const endMin = et.getHours()*60 + et.getMinutes();
+      return { l, startMin: Math.max(segStart, startMin), endMin: Math.min(segEnd, endMin) };
+    }).filter(e => e.endMin > e.startMin).sort((a,b)=> a.startMin - b.startMin);
+    const gaps: { id:string; startMin:number; endMin:number }[] = [];
+    let cursor = segStart;
+    for(const e of entries){
+      if(e.startMin > cursor){
+        const gapSize = e.startMin - cursor;
+        if(gapSize >= MIN_GAP_MINUTES){
+          gaps.push({ id:`gap-${cursor}-${e.startMin}`, startMin: cursor, endMin: e.startMin });
+        }
+      }
+      cursor = Math.max(cursor, e.endMin);
+    }
+    if(cursor < segEnd){
+      const tail = segEnd - cursor;
+      if(tail >= MIN_GAP_MINUTES){
+        gaps.push({ id:`gap-${cursor}-${segEnd}`, startMin: cursor, endMin: segEnd });
+      }
+    }
+    const items: Array<{ type:'gap'; id:string; startMin:number; endMin:number } | { type:'log'; id:string; data:any; startMin:number; endMin:number }> = [];
+    for(const g of gaps) items.push({ type:'gap', id:g.id, startMin:g.startMin, endMin:g.endMin });
+    for(const e of entries) items.push({ type:'log', id:e.l.id, data:e.l, startMin:e.startMin, endMin:e.endMin });
+    items.sort((a,b)=> a.startMin - b.startMin || (a.type==='gap' ? -1 : 1));
+    return { items, segStart, segEnd };
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 flex-wrap">
@@ -742,25 +779,16 @@ export default function WeeklyScheduleTable(){
                       const freeKey = `${day}:${r.start}-${r.end}`;
                       const freeData = !act.seg ? freeLogsMap[freeKey] : undefined; // ensure key defined before usage
                       const isFree = !act.seg;
-                      const breakdownVisible = freeData && (showFreeKey === freeKey);
                       const handleCellClick = () => {
                         if(act.seg){
                           openModal(act.seg);
                         } else {
-                          // Mobile fallback: if has freeData and not currently shown, show breakdown first; second tap opens modal
-                          if(freeData){
-                            if(showFreeKey !== freeKey){
-                              setShowFreeKey(freeKey);
-                              return;
-                            }
-                          }
                           openModal({ temp:true, weekday: day, startMinute: r.start, endMinute: r.end });
                         }
                       };
                       return (
                         <td key={day} className={`group relative px-2 py-1 whitespace-nowrap ${bg} ${freeData ? 'border border-amber-400/40 ring-1 ring-amber-400/30 rounded' : ''}`}
                           onClick={handleCellClick}
-                          onMouseLeave={()=> { if(showFreeKey === freeKey) setShowFreeKey(null); }}
                         >
                           {act.seg ? (
                             hasAny ? (
@@ -846,26 +874,10 @@ export default function WeeklyScheduleTable(){
                             )
                           )}
                           {!act.seg && freeData && (
-                            <>
-                              <span className="absolute top-0 right-0 m-0.5 flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/90 text-[9px] font-semibold text-black shadow select-none" title="Time logged in free interval">
-                                <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: freeData.activities[0]?.color || '#92400e' }} />
-                                LOG {freeData.totalMinutes}m
-                              </span>
-                              <div className={`absolute z-20 left-1 top-5 bg-neutral-900 text-neutral-100 text-[10px] rounded p-2 shadow-xl border border-neutral-700 w-56 ${breakdownVisible ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition`}>
-                                <div className="font-semibold mb-1 flex items-center justify-between">
-                                  <span>Free time usage</span>
-                                  <button type="button" onClick={(e)=>{ e.stopPropagation(); if(showFreeKey===freeKey) setShowFreeKey(null); else setShowFreeKey(freeKey); }} className="px-1 py-0.5 text-[9px] rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-600">{breakdownVisible ? 'Close' : 'Hold'}</button>
-                                </div>
-                                {freeData.activities.map(a=> (
-                                  <div key={a.activityId} className="flex items-center gap-2">
-                                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: a.color || '#666' }} />
-                                    <span className="truncate">{a.name}</span>
-                                    <span className="ml-auto tabular-nums">{a.minutes}m ({a.percent}%)</span>
-                                  </div>
-                                ))}
-                                <div className="mt-1 text-[9px] text-neutral-400">First tap to view, second to open modal.</div>
-                              </div>
-                            </>
+                            <span className="absolute top-0 right-0 m-0.5 flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/90 text-[9px] font-semibold text-black shadow select-none" title="Time logged in free interval">
+                              <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: freeData.activities[0]?.color || '#92400e' }} />
+                              LOG {freeData.totalMinutes}m
+                            </span>
                           )}
                           {act.seg && act.seg.activityId && (
                             <span className={`block text-[9px] mt-0.5 text-gray-500 ${usageUpdating ? 'opacity-60' : ''}`}>
@@ -942,7 +954,21 @@ export default function WeeklyScheduleTable(){
             {/* Existing logs list */}
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold">Existing logs{('temp' in selectedSegment) ? ' (free interval)' : ''}</span>
+                <span className="text-[11px] font-semibold flex items-center gap-2">Existing logs{('temp' in selectedSegment) ? ' (free interval)' : ''}
+                  {!( 'temp' in selectedSegment) && (
+                    (()=>{
+                      const threshold = Number(MIN_GAP_MINUTES);
+                      const plural = threshold === 1 ? '' : 's';
+                      return (
+                        <span
+                          className="text-[8px] px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 border border-amber-400 text-amber-700 dark:text-amber-300 select-none"
+                          title={`Only showing internal free gaps that are at least ${threshold} minute${plural} long.`}
+                          aria-label={`Gap display threshold: ${threshold} minute${plural}`}
+                        >≥{threshold}m gaps</span>
+                      );
+                    })()
+                  )}
+                </span>
                 {modalLogsLoading && <span className="text-[10px] text-blue-500">loading…</span>}
               </div>
               {modalLogs.length === 0 && !modalLogsLoading && (
@@ -951,47 +977,23 @@ export default function WeeklyScheduleTable(){
               {modalLogs.length > 0 && (
                 <ul className="max-h-40 overflow-auto divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded text-[10px]">
                   {(() => {
-                    if(selectedSegment && !('temp' in selectedSegment)){
-                      // Compute gaps inside the segment
-                      const segStart = selectedSegment.startMinute;
-                      const segEnd = selectedSegment.endMinute;
-                      const logEntries = modalLogs.map(l => {
-                        const st = new Date(l.startedAt); const et = new Date(l.endedAt);
-                        const startMin = st.getHours()*60 + st.getMinutes();
-                        const endMin = et.getHours()*60 + et.getMinutes();
-                        return { l, startMin: Math.max(segStart, startMin), endMin: Math.min(segEnd, endMin) };
-                      }).filter(e => e.endMin > e.startMin) // sanity
-                        .sort((a,b)=> a.startMin - b.startMin);
-                      const gaps: { id:string; startMin:number; endMin:number; }[] = [];
-                      let cursor = segStart;
-                      for(const e of logEntries){
-                        if(e.startMin > cursor){
-                          gaps.push({ id: `gap-${cursor}-${e.startMin}`, startMin: cursor, endMin: e.startMin });
-                        }
-                        cursor = Math.max(cursor, e.endMin);
-                      }
-                      if(cursor < segEnd){
-                        gaps.push({ id: `gap-${cursor}-${segEnd}`, startMin: cursor, endMin: segEnd });
-                      }
-                      // Build unified timeline (gaps + logs) sorted by start
-                      const items: Array<{ type:'gap'; id:string; startMin:number; endMin:number } | { type:'log'; id:string; data:any; startMin:number; endMin:number }> = [];
-                      for(const g of gaps) items.push({ type:'gap', id:g.id, startMin:g.startMin, endMin:g.endMin });
-                      for(const e of logEntries) items.push({ type:'log', id:e.l.id, data:e.l, startMin:e.startMin, endMin:e.endMin });
-                      items.sort((a,b)=> a.startMin - b.startMin || (a.type==='gap'? -1:1));
+                    const timeline = buildSegmentTimelineWithGaps();
+                    if(timeline){
+                      const { items, segStart, segEnd } = timeline;
                       const segDur = segEnd - segStart;
                       return items.map(it => {
                         if(it.type === 'gap'){
                           const dur = it.endMin - it.startMin;
                           const pct = Math.round((dur / segDur)*100);
                           return (
-                            <li key={it.id} className="flex items-center gap-2 px-2 py-1 bg-amber-50 dark:bg-amber-900/20">
+                            <li key={it.id} className="flex items-center gap-2 px-2 py-1 bg-amber-50 dark:bg-amber-900/20" aria-label={`Free gap ${minutesToHHMM(it.startMin)} to ${minutesToHHMM(it.endMin)} (${dur} minutes)`}>
                               <div className="flex-1 flex flex-col">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="font-mono">{minutesToHHMM(it.startMin)}-{minutesToHHMM(it.endMin)}</span>
                                   <span className="text-[9px] px-1 rounded bg-amber-200 text-amber-900 border border-amber-400">FREE {dur}m ({pct}%)</span>
                                 </div>
                               </div>
-                              <button type="button" onClick={()=> useGapRange(it.startMin, it.endMin)} className="text-[9px] px-1 py-0.5 rounded border border-blue-400 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30">Use</button>
+                              <button type="button" aria-label={`Use free gap ${minutesToHHMM(it.startMin)} to ${minutesToHHMM(it.endMin)}`} onClick={()=> useGapRange(it.startMin, it.endMin)} className="text-[9px] px-1 py-0.5 rounded border border-blue-400 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30">Use</button>
                             </li>
                           );
                         } else {
@@ -1020,9 +1022,10 @@ export default function WeeklyScheduleTable(){
                                     </div>
                                   </div>
                                   <div className="flex flex-col gap-1">
-                                    <button type="button" disabled={modalLogSaving} onClick={()=> beginEditModalLog(l)} className="text-[9px] px-1 py-0.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50">Edit</button>
+                                    <button type="button" aria-label={`Edit log ${minutesToHHMM(it.startMin)} to ${minutesToHHMM(it.endMin)}`} disabled={modalLogSaving} onClick={()=> beginEditModalLog(l)} className="text-[9px] px-1 py-0.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50">Edit</button>
                                     <button
                                       type="button"
+                                      aria-label={pendingDeleteLogId === l.id ? 'Confirm delete log' : 'Delete log'}
                                       disabled={modalLogSaving}
                                       onClick={()=> deleteModalLog(l)}
                                       className={
@@ -1123,9 +1126,10 @@ export default function WeeklyScheduleTable(){
                                 </div>
                               </div>
                               <div className="flex flex-col gap-1">
-                                <button type="button" disabled={modalLogSaving} onClick={()=> beginEditModalLog(l)} className="text-[9px] px-1 py-0.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50">Edit</button>
+                                <button type="button" aria-label={`Edit log ${tm(st)} to ${tm(et)}`} disabled={modalLogSaving} onClick={()=> beginEditModalLog(l)} className="text-[9px] px-1 py-0.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50">Edit</button>
                                 <button
                                   type="button"
+                                  aria-label={pendingDeleteLogId === l.id ? 'Confirm delete log' : 'Delete log'}
                                   disabled={modalLogSaving}
                                   onClick={()=> deleteModalLog(l)}
                                   className={
