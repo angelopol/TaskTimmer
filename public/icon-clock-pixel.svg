@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" shape-rendering="crispEdges">
+  <!-- Pixel art clock icon -->
+  <defs>
+    <style>
+      .bg{fill:#111827}
+      .frame{fill:#f59e0b}
+      .face{fill:#f1f5f9}
+      .tick{fill:#475569}
+      .hand{fill:#dc2626}
+      .center{fill:#1e293b}
+    </style>
+  </defs>
+  <!-- Background (optional transparent) -->
+  <rect width="32" height="32" fill="none" />
+  <!-- Outer frame (pixel border) -->
+  <rect class="frame" x="4" y="4" width="24" height="24" />
+  <rect class="face" x="6" y="6" width="20" height="20" />
+  <!-- Hour ticks -->
+  <rect class="tick" x="15" y="7" width="2" height="2" />
+  <rect class="tick" x="15" y="23" width="2" height="2" />
+  <rect class="tick" x="23" y="15" width="2" height="2" />
+  <rect class="tick" x="7" y="15" width="2" height="2" />
+  <!-- Hands (hour + minute) -->
+  <!-- Hour hand pointing at 10 -->
+  <rect class="hand" x="14" y="14" width="2" height="5" transform="rotate(-45 15 15)" />
+  <!-- Minute hand pointing at 2 -->
+  <rect class="hand" x="15" y="10" width="2" height="8" />
+  <!-- Center cap -->
+  <rect class="center" x="14" y="14" width="4" height="4" />
+</svg>

@@ -1,6 +1,8 @@
 "use client";
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useToast } from '../toast/ToastProvider';
+import { Button, IconButton } from '../ui/Button';
+import { IconAdd, IconEdit, IconTrash, IconSave, IconClose } from '../ui/icons';
 
 interface Activity { id: string; name: string; color: string | null; weeklyTargetMinutes: number; createdAt: string; }
 
@@ -14,6 +16,7 @@ export default function ActivitiesClient() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<{ name: string; color: string; weeklyTargetMinutes: number }>({ name: '', color: '#000000', weeklyTargetMinutes: 0 });
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null); // two-step delete
+  const [search, setSearch] = useState('');
 
   async function load() {
     try {
@@ -73,44 +76,68 @@ export default function ActivitiesClient() {
   addToast({ message: 'Deleted activity', type: 'success' });
   }
 
+  const filteredItems = useMemo(()=>{
+    if(!search.trim()) return items;
+    const q = search.toLowerCase();
+    return items.filter(i => i.name.toLowerCase().includes(q));
+  }, [items, search]);
+
   return (
     <div className="space-y-6">
       <header className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-semibold">Activities</h1>
+        <h1 className="tt-heading-page">Activities</h1>
       </header>
 
-      <section className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-4 shadow-sm">
-        <h2 className="font-medium mb-3 text-sm tracking-wide uppercase text-gray-600 dark:text-gray-300">Create</h2>
-        <form onSubmit={createActivity} className="flex flex-col md:flex-row gap-3 md:items-end">
-          <div className="flex-1 min-w-[160px]">
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Name</label>
-            <input required value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} className="w-full border dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-900 text-sm" />
+      <section className="tt-panel tt-panel-padding space-y-4">
+        <h2 className="tt-heading-section">New Activity</h2>
+        <form onSubmit={createActivity} className="grid gap-4 md:grid-cols-[1fr_auto_auto_auto] items-end">
+          <div className="flex flex-col gap-1">
+            <label className="uppercase tracking-wide text-gray-500 dark:text-gray-400 text-[11px]">Name</label>
+            <input required value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} className="w-full border rounded p-1 text-xs dark:bg-gray-950 dark:border-gray-700" />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Color</label>
-            <input type="color" value={form.color} onChange={e=>setForm(f=>({...f,color:e.target.value}))} className="h-9 w-12 p-1 border dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
+          <div className="flex flex-col gap-1">
+            <label className="uppercase tracking-wide text-gray-500 dark:text-gray-400 text-[11px]">Color</label>
+            <input aria-label="Activity color" type="color" value={form.color} onChange={e=>setForm(f=>({...f,color:e.target.value}))} className="h-9 w-12 p-1 border rounded dark:bg-gray-950 dark:border-gray-700" />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Weekly Target (min)</label>
-            <input type="number" min={0} value={form.weeklyTargetMinutes} onChange={e=>setForm(f=>({...f,weeklyTargetMinutes:Number(e.target.value)}))} className="w-28 border dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-900 text-sm" />
+          <div className="flex flex-col gap-1">
+            <label className="uppercase tracking-wide text-gray-500 dark:text-gray-400 text-[11px]">Weekly Target (m)</label>
+            <input type="number" min={0} value={form.weeklyTargetMinutes} onChange={e=>setForm(f=>({...f,weeklyTargetMinutes:Number(e.target.value)}))} className="w-28 border rounded p-1 text-xs dark:bg-gray-950 dark:border-gray-700" />
+            <p className="text-[10px] text-gray-500 dark:text-gray-400">Used for progress metrics & weekly goal tracking.</p>
           </div>
-          <button disabled={creating} className="bg-blue-600 text-white text-sm font-medium px-4 py-2 rounded disabled:opacity-50">{creating ? 'Saving...' : 'Add'}</button>
+          <div className="flex md:justify-end">
+            <Button type="submit" loading={creating} leftIcon={<IconAdd size={14} />}>{creating ? 'Saving...' : 'Add Activity'}</Button>
+          </div>
         </form>
       </section>
 
       <section className="space-y-3">
-        <h2 className="font-medium text-sm tracking-wide uppercase text-gray-600 dark:text-gray-300">List</h2>
+        <div className="flex flex-wrap items-center gap-3 justify-between">
+          <h2 className="tt-heading-section">List</h2>
+          <div className="flex items-center gap-2 ml-auto">
+            <input
+              type="text"
+              placeholder="Search activities..."
+              value={search}
+              onChange={e=> setSearch(e.target.value)}
+              className="border rounded px-2 py-1 text-xs dark:bg-gray-950 dark:border-gray-700 w-48"
+              aria-label="Search activities"
+            />
+            {search && (
+              <Button size="sm" variant="ghost" onClick={()=> setSearch('')}>Clear</Button>
+            )}
+          </div>
+        </div>
         {loading && <p>Loading...</p>}
         {error && <p className="text-red-600 text-sm">{error}</p>}
         {/* Mobile cards */}
         <div className="grid gap-2 sm:hidden">
-          {items.map(it => {
+          {filteredItems.map(it => {
             const editing = editingId === it.id;
             return (
-              <div key={it.id} className="border border-gray-200 dark:border-gray-700 rounded p-2 bg-white dark:bg-gray-800 text-xs flex flex-col gap-1">
+              <div key={it.id} className="border border-gray-200 dark:border-gray-700 rounded p-3 bg-white dark:bg-gray-900 text-[11px] flex flex-col gap-2">
                 <div className="flex items-center justify-between">
                   {editing ? (
-                    <input value={editData.name} onChange={e=>setEditData(d=>({...d,name:e.target.value}))} className="border dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-900 text-xs" />
+                    <input value={editData.name} onChange={e=>setEditData(d=>({...d,name:e.target.value}))} className="border dark:border-gray-700 rounded px-2 py-1 bg-white dark:bg-gray-950 text-[11px]" />
                   ) : (
                     <span className="flex items-center gap-2 font-medium"><span className="w-3 h-3 rounded-full inline-block" style={{background:it.color||'#999'}} />{it.name}</span>
                   )}
@@ -118,23 +145,23 @@ export default function ActivitiesClient() {
                 </div>
                 <div className="flex items-center gap-2">
                   {editing ? (
-                    <input type="color" value={editData.color} onChange={e=>setEditData(d=>({...d,color:e.target.value}))} className="h-7 w-9 p-1 border dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
+                    <>
+                      <input aria-label="Edit color" type="color" value={editData.color} onChange={e=>setEditData(d=>({...d,color:e.target.value}))} className="h-7 w-9 p-1 border dark:border-gray-700 rounded bg-white dark:bg-gray-950" />
+                      <input aria-label="Edit weekly target (minutes)" type="number" min={0} value={editData.weeklyTargetMinutes} onChange={e=>setEditData(d=>({...d,weeklyTargetMinutes:Number(e.target.value)}))} className="w-20 border dark:border-gray-700 rounded px-2 py-1 bg-white dark:bg-gray-950 text-[11px]" />
+                    </>
                   ) : (
                     <span className="text-[10px] text-gray-500">{it.color}</span>
                   )}
-                  {editing ? (
-                    <input type="number" min={0} value={editData.weeklyTargetMinutes} onChange={e=>setEditData(d=>({...d,weeklyTargetMinutes:Number(e.target.value)}))} className="w-20 border dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-900 text-xs" />
-                  ) : null}
                   <div className="ml-auto flex gap-2">
                     {editing ? (
                       <>
-                        <button onClick={()=>saveEdit(it.id)} className="text-blue-600">Save</button>
-                        <button onClick={()=>setEditingId(null)} className="text-gray-500">Cancel</button>
+                        <Button variant="primary" size="sm" onClick={()=>saveEdit(it.id)} leftIcon={<IconSave size={14} />}>Save</Button>
+                        <Button variant="ghost" size="sm" onClick={()=>setEditingId(null)} leftIcon={<IconClose size={14} />}>Cancel</Button>
                       </>
                     ) : (
                       <>
-                        <button onClick={()=>startEdit(it)} className="text-blue-600">Edit</button>
-                        <button onClick={()=>remove(it.id)} className={"text-red-600 " + (pendingDeleteId===it.id? 'font-bold animate-pulse' : '')}>{pendingDeleteId===it.id? 'Confirm' : 'Del'}</button>
+                        <Button variant="secondary" size="sm" onClick={()=>startEdit(it)} leftIcon={<IconEdit size={14} />}>Edit</Button>
+                        <Button variant={pendingDeleteId===it.id? 'danger':'ghost'} size="sm" onClick={()=>remove(it.id)} leftIcon={<IconTrash size={14} />}>{pendingDeleteId===it.id? 'Confirm' : 'Delete'}</Button>
                       </>
                     )}
                   </div>
@@ -142,64 +169,69 @@ export default function ActivitiesClient() {
               </div>
             );
           })}
-          {items.length === 0 && !loading && <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-xs">No activities yet.</div>}
+          {filteredItems.length === 0 && !loading && <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-xs">No activities found.</div>}
         </div>
         {/* Desktop table */}
         <div className="overflow-x-auto hidden sm:block">
-          <table className="min-w-full text-sm border-separate border-spacing-y-1">
+          <table className="w-full text-xs">
             <thead>
-              <tr className="text-left text-gray-600 dark:text-gray-300">
-                <th className="py-1 pr-4">Name</th>
-                <th className="py-1 pr-4">Color</th>
-                <th className="py-1 pr-4">Weekly Target</th>
-                <th className="py-1 pr-4">Actions</th>
+              <tr className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 uppercase text-[10px] tracking-wide">
+                <th className="text-left px-3 py-2 font-semibold">Activity</th>
+                <th className="text-left px-3 py-2 font-semibold">Color</th>
+                <th className="text-left px-3 py-2 font-semibold">Weekly Target</th>
+                <th className="text-right px-3 py-2 font-semibold">Actions</th>
               </tr>
             </thead>
-            <tbody>
-              {items.map(it => {
+            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+              {filteredItems.map(it => {
                 const editing = editingId === it.id;
                 return (
-                  <tr key={it.id} className="bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
-                    <td className="py-2 pr-4 font-medium">
+                  <tr key={it.id} className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                    <td className="px-3 py-2 align-middle">
                       {editing ? (
-                        <input value={editData.name} onChange={e=>setEditData(d=>({...d,name:e.target.value}))} className="border dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-900" />
+                        <input value={editData.name} onChange={e=>setEditData(d=>({...d,name:e.target.value}))} className="w-full border rounded px-2 py-1 text-xs dark:bg-gray-950 dark:border-gray-700" />
                       ) : (
-                        <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full inline-block" style={{background:it.color||'#999'}} />{it.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="w-3 h-3 rounded-full" style={{background:it.color||'#999'}} />
+                          <span className="font-medium text-gray-800 dark:text-gray-200">{it.name}</span>
+                        </div>
                       )}
                     </td>
-                    <td className="py-2 pr-4">
+                    <td className="px-3 py-2 align-middle">
                       {editing ? (
-                        <input type="color" value={editData.color} onChange={e=>setEditData(d=>({...d,color:e.target.value}))} className="h-8 w-10 p-1 border dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
+                        <input type="color" value={editData.color} onChange={e=>setEditData(d=>({...d,color:e.target.value}))} className="h-8 w-10 p-1 border rounded dark:bg-gray-950 dark:border-gray-700" />
                       ) : (
-                        <span>{it.color}</span>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-[10px] font-mono text-gray-600 dark:text-gray-300">{it.color}</span>
                       )}
                     </td>
-                    <td className="py-2 pr-4">
+                    <td className="px-3 py-2 align-middle">
                       {editing ? (
-                        <input type="number" min={0} value={editData.weeklyTargetMinutes} onChange={e=>setEditData(d=>({...d,weeklyTargetMinutes:Number(e.target.value)}))} className="w-24 border dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-900" />
+                        <input type="number" min={0} value={editData.weeklyTargetMinutes} onChange={e=>setEditData(d=>({...d,weeklyTargetMinutes:Number(e.target.value)}))} className="w-24 border rounded px-2 py-1 text-xs dark:bg-gray-950 dark:border-gray-700" />
                       ) : (
-                        it.weeklyTargetMinutes
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-[10px] font-medium">{it.weeklyTargetMinutes}m</span>
                       )}
                     </td>
-                    <td className="py-2 pr-4 space-x-2">
-                      {editing ? (
-                        <>
-                          <button onClick={()=>saveEdit(it.id)} className="text-blue-600 hover:underline">Save</button>
-                          <button onClick={()=>setEditingId(null)} className="text-gray-500 hover:underline">Cancel</button>
-                        </>
-                      ) : (
-                        <>
-                          <button onClick={()=>startEdit(it)} className="text-blue-600 hover:underline">Edit</button>
-                          <button onClick={()=>remove(it.id)} className={"text-red-600 hover:underline " + (pendingDeleteId===it.id? 'font-bold animate-pulse' : '')}>{pendingDeleteId===it.id? 'Confirm' : 'Delete'}</button>
-                        </>
-                      )}
+                    <td className="px-3 py-2 align-middle text-right">
+                      <div className="inline-flex items-center gap-2">
+                        {editing ? (
+                          <>
+                            <Button variant="primary" size="sm" onClick={()=>saveEdit(it.id)} leftIcon={<IconSave size={14} />}>Save</Button>
+                            <Button variant="ghost" size="sm" onClick={()=>setEditingId(null)} leftIcon={<IconClose size={14} />}>Cancel</Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button variant="secondary" size="sm" onClick={()=>startEdit(it)} leftIcon={<IconEdit size={14} />}>Edit</Button>
+                            <Button variant={pendingDeleteId===it.id? 'danger':'ghost'} size="sm" onClick={()=>remove(it.id)} leftIcon={<IconTrash size={14} />}>{pendingDeleteId===it.id? 'Confirm' : 'Delete'}</Button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
               })}
-              {items.length === 0 && !loading && (
+              {filteredItems.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={4} className="text-center py-6 text-gray-500 dark:text-gray-400">No activities yet.</td>
+                  <td colSpan={4} className="text-center py-8 text-gray-500 dark:text-gray-400 text-xs">No activities yet.</td>
                 </tr>
               )}
             </tbody>

@@ -3,6 +3,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useTheme } from '../ThemeProvider';
 import { minutesToHHMM, hhmmToMinutes, WEEKDAY_NAMES_SHORT } from '../../lib/time';
 import { useToast } from '../toast/ToastProvider';
+import { Button, IconButton } from '../../components/ui/Button';
+import { IconAdd, IconEdit, IconTrash, IconClose, IconSave } from '../../components/ui/icons';
 
 interface Activity { id: string; name: string; color: string | null; }
 interface Segment { id: string; weekday: number; startMinute: number; endMinute: number; activityId: string | null; notes: string | null; activity?: Activity | null; effectiveFrom: string; effectiveTo: string | null; }
@@ -189,7 +191,7 @@ export default function ScheduleSegmentsClient(){
         {/* Local toast system removed in favor of global provider */}
       </div>
       <div className="flex flex-wrap gap-3 items-center">
-        <h1 className="text-lg font-semibold">Schedule Segments</h1>
+        <h1 className="tt-heading-page text-lg">Schedule Segments</h1>
         <select value={filterWeekday} onChange={e=>setFilterWeekday(e.target.value==='all'?'all':Number(e.target.value))} className="border rounded px-2 py-1 text-sm dark:bg-gray-900 dark:border-gray-700">
           <option value="all">All days</option>
           {weekdayNames.map((n,i)=>(<option key={i} value={i+1}>{n}</option>))}
@@ -198,15 +200,17 @@ export default function ScheduleSegmentsClient(){
           <input type="checkbox" checked={showFuture} onChange={e=>setShowFuture(e.target.checked)} />
           <span>Show future versions</span>
         </label>
-        {editing && <button onClick={reset} className="text-xs underline ml-2">Cancel</button>}
+  {editing && <Button variant="subtle" size="sm" onClick={reset} leftIcon={<IconClose className="w-3.5 h-3.5" />}>Cancel</Button>}
       </div>
       {error && <div className="text-red-600 text-sm">{error}</div>}
       {loading && <div className="text-sm">Loading...</div>}
       {!loading && displayWeekdays.map(wd => (
-        <div key={wd} className="border rounded-md p-3 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800">
+        <div key={wd} className="tt-panel tt-panel-padding pt-3 pb-3">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="font-medium text-sm">{weekdayNames[wd-1]}</h2>
-            {!editing && <button onClick={()=>startCreate(wd)} className="text-xs px-2 py-1 border rounded hover:bg-gray-100 dark:hover:bg-gray-800">Add</button>}
+            <h2 className="font-medium text-sm tt-text-muted">{weekdayNames[wd-1]}</h2>
+            {!editing && (
+              <Button size="sm" variant="secondary" onClick={()=>startCreate(wd)} leftIcon={<IconAdd className="w-3.5 h-3.5" />}>Add</Button>
+            )}
           </div>
           <div className="space-y-2">
             {grouped[wd].map(seg => {
@@ -225,8 +229,23 @@ export default function ScheduleSegmentsClient(){
                       <span className="text-[10px] px-1 rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300" title={`Future version scheduled for ${futureInfo.date}${diff? '\n'+diff:''}`}>Replaced {futureInfo.date}</span>
                     )}
                     <div className="ml-auto flex gap-1 items-center">
-                      <button disabled={editDisabled} onClick={()=>!editDisabled && startEdit(seg)} className={"px-1 rounded " + (editDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100 dark:hover:bg-gray-800')}>Edit</button>
-                      <button onClick={()=>remove(seg.id)} className={"px-1 rounded " + (pendingDeleteSegmentId===seg.id ? 'bg-red-600 text-white animate-pulse' : 'text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30')}>{pendingDeleteSegmentId===seg.id? 'Confirm' : 'Del'}</button>
+                      <IconButton
+                        size="sm"
+                        variant="subtle"
+                        disabled={editDisabled}
+                        onClick={()=>!editDisabled && startEdit(seg)}
+                        icon={<IconEdit className="w-3.5 h-3.5" />}
+                        label="Edit segment"
+                        className={editDisabled ? 'opacity-40 cursor-not-allowed' : ''}
+                      />
+                      <IconButton
+                        size="sm"
+                        variant={pendingDeleteSegmentId===seg.id ? 'danger' : 'subtle'}
+                        onClick={()=>remove(seg.id)}
+                        icon={<IconTrash className="w-3.5 h-3.5" />}
+                        label={pendingDeleteSegmentId===seg.id? 'Confirm delete' : 'Delete segment'}
+                        className={pendingDeleteSegmentId===seg.id ? 'animate-pulse' : ''}
+                      />
                     </div>
                   </div>
                   {futureStack.length>0 && (
@@ -237,7 +256,14 @@ export default function ScheduleSegmentsClient(){
                           {f.activity && <span className="px-1 rounded bg-gray-100 dark:bg-gray-800" style={{borderLeft: f.activity.color ? '4px solid '+f.activity.color : undefined}}>{f.activity.name}</span>}
                           <span className="text-indigo-700 dark:text-indigo-300">Future {new Date(f.effectiveFrom).toISOString().slice(0,10)}</span>
                           <div className="ml-auto flex gap-1">
-                            <button onClick={()=>startEdit(f)} className="px-1 rounded hover:bg-indigo-100 dark:hover:bg-indigo-800/40">Edit</button>
+                            <IconButton
+                              size="sm"
+                              variant="subtle"
+                              onClick={()=>startEdit(f)}
+                              icon={<IconEdit className="w-3 h-3" />}
+                              label="Edit future segment"
+                              className="hover:bg-indigo-100 dark:hover:bg-indigo-800/40"
+                            />
                           </div>
                         </div>
                       ))}
@@ -309,8 +335,8 @@ export default function ScheduleSegmentsClient(){
               )}
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={reset} className="text-xs px-2 py-1 border rounded dark:border-gray-600">Cancel</button>
-              <button disabled={saving} className="text-xs px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50">{saving ? 'Saving...' : 'Save'}</button>
+              <Button type="button" variant="subtle" size="sm" onClick={reset} leftIcon={<IconClose className="w-3.5 h-3.5" />}>Cancel</Button>
+              <Button type="submit" variant="primary" size="sm" disabled={saving} leftIcon={<IconSave className="w-3.5 h-3.5" />} loading={saving}>{saving ? 'Saving' : 'Save'}</Button>
             </div>
           </div>
         </form>

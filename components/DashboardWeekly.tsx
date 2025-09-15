@@ -1,6 +1,8 @@
 "use client";
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { Button } from './ui/Button';
+import { IconCalendar } from './ui/icons';
 
 interface ActivityStat {
   id: string;
@@ -54,25 +56,14 @@ export function DashboardWeekly() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 tt-panel tt-panel-padding">
         <div>
-          <h2 className="text-xl font-semibold mb-1">Weekly Dashboard</h2>
-          <p className="text-xs text-gray-500">Week {data.weekStart} to {data.weekEndExclusive}</p>
+          <h2 className="tt-heading-page mb-1">Weekly Dashboard</h2>
+          <p className="text-xs tt-text-muted">Week {data.weekStart} to {data.weekEndExclusive}</p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <Link
-            href="/schedule"
-            aria-label="Go to weekly schedule"
-            className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium bg-blue-600 text-white hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1 dark:focus:ring-offset-gray-900 shadow-sm"
-          >
-            {/* icon */}
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-90">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" />
-              <line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-            </svg>
-            <span>Go to schedule</span>
+          <Link href="/schedule" aria-label="Go to weekly schedule" className="group">
+            <Button asChild variant="primary" size="sm" leftIcon={<IconCalendar size={14} />}>Go to schedule</Button>
           </Link>
         </div>
       </header>
@@ -83,13 +74,13 @@ export function DashboardWeekly() {
           const planned = a.plannedMinutesWeek;
           const sources = Object.entries(a.loggedBySource).sort((x,y)=>y[1]-x[1]);
           return (
-            <div key={a.id} className="border rounded p-3 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 flex flex-col">
+            <div key={a.id} className="tt-panel tt-panel-padding flex flex-col">
               <div className="flex items-center justify-between mb-1">
                 <h3 className="font-medium flex items-center gap-2">
                   <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: a.color || '#999' }} />
                   {a.name}
                 </h3>
-                <span className="text-xs text-gray-500">{a.done} / {a.target} min {a.over>0 && <strong className="text-red-600 ml-1">+{a.over}</strong>}</span>
+                <span className="text-xs tt-text-muted">{a.done} / {a.target} min {a.over>0 && <strong className="text-red-600 ml-1">+{a.over}</strong>}</span>
               </div>
               <div className="space-y-2 mt-1 flex-1">
                 {/* Target progress bar */}
@@ -114,11 +105,12 @@ export function DashboardWeekly() {
                 </div>
                 {/* Sources breakdown */}
                 {sources.length > 0 && (
-                  <div className="text-[11px] text-gray-700 flex flex-wrap gap-x-3 gap-y-1">
+                  <div className="text-[11px] flex flex-wrap gap-1">
                     {sources.map(([k,v]) => (
-                      <span key={k}>{k}: {v}m</span>
+                      <span key={k} className="tt-badge" data-size="sm">{k}: {v}m</span>
                     ))}
-                    <span className="text-gray-500">Partial {a.loggedPartialMinutes}m · Full {a.loggedFullMinutes}m</span>
+                    <span className="tt-badge" data-size="sm" data-variant="amber">Partial {a.loggedPartialMinutes}m</span>
+                    <span className="tt-badge" data-size="sm" data-variant="green">Full {a.loggedFullMinutes}m</span>
                   </div>
                 )}
               </div>

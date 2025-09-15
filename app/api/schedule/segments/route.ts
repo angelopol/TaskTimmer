@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../../../lib/prisma';
+import type { Prisma } from '@prisma/client';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../../lib/nextAuthOptions';
 import { z } from 'zod';
@@ -191,7 +192,7 @@ export async function PATCH(req: Request) {
   }
 
   // Transaction: close existing, create new future version
-  const result = await prisma.$transaction(async (tx: typeof prisma) => {
+  const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const closed = await tx.scheduleSegment.update({ where: { id: existing.id }, data: { effectiveTo: newEffectiveTo } });
     const newSeg = await tx.scheduleSegment.create({ data: {
       userId,

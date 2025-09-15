@@ -1,5 +1,7 @@
 "use client";
 import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { Button, IconButton } from '../ui/Button';
+import { IconChevronLeft, IconChevronRight, IconReload, IconEdit, IconSave, IconClose, IconTrash } from '../ui/icons';
 import { minutesToHHMM, WEEKDAY_NAMES_LONG, combineDateAndTime } from '../../lib/time';
 import { useWeek } from '../week/WeekContext';
 import { useToast } from '../toast/ToastProvider';
@@ -674,11 +676,11 @@ export default function WeeklyScheduleTable(){
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 flex-wrap">
-        <h2 className="text-lg font-semibold">Weekly Schedule <span className="text-sm font-normal text-gray-500 dark:text-gray-400">{weekRangeLabel}</span></h2>
+        <h2 className="tt-heading-page text-lg">Weekly Schedule <span className="text-sm font-normal text-gray-500 dark:text-gray-400">{weekRangeLabel}</span></h2>
         <div className="flex items-center gap-1">
-          <button type="button" onClick={gotoPrevWeek} className="text-[10px] px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">◀</button>
-          <button type="button" onClick={gotoThisWeek} className="text-[10px] px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">Hoy</button>
-          <button type="button" onClick={gotoNextWeek} className="text-[10px] px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">▶</button>
+          <IconButton size="sm" variant="subtle" label="Previous week" onClick={gotoPrevWeek} icon={<IconChevronLeft size={14} />} />
+          <Button size="sm" variant="secondary" onClick={gotoThisWeek}>This week</Button>
+          <IconButton size="sm" variant="subtle" label="Next week" onClick={gotoNextWeek} icon={<IconChevronRight size={14} />} />
         </div>
         <label className="flex items-center gap-1 ml-2 text-[10px] px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 cursor-pointer select-none">
           <input type="checkbox" className="h-3 w-3" checked={historicalMode} onChange={e=>setHistoricalMode(e.target.checked)} />
@@ -688,12 +690,12 @@ export default function WeeklyScheduleTable(){
           <span className="text-[10px] px-2 py-1 rounded bg-purple-600 text-white">Snapshot: {snapshotInfo || weekStart}</span>
         )}
         {IS_DEV && (
-          <button type="button" onClick={()=>setShowDebug(d=>!d)} className="text-[10px] px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">
+          <Button type="button" size="sm" variant="ghost" onClick={()=>setShowDebug(d=>!d)}>
             {showDebug ? 'Hide debug' : 'Show debug'}
-          </button>
+          </Button>
         )}
         <span className="text-[10px] px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 select-none">fetch#{fetchCount}</span>
-        <button type="button" onClick={()=>loadFreeLogs()} className="text-[10px] px-2 py-1 rounded border border-blue-400 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/40">Reload free logs</button>
+  <Button type="button" size="sm" variant="secondary" leftIcon={<IconReload size={14} />} onClick={()=>loadFreeLogs()}>Reload free logs</Button>
       </div>
       {loading && <div className="text-sm">Loading...</div>}
   {!loading && loadingFreeLogs && <div className="text-xs text-amber-600 flex items-center gap-2"><span className="w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />Loading free logs…</div>}
@@ -944,7 +946,7 @@ export default function WeeklyScheduleTable(){
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded shadow-lg w-full max-w-md p-4 space-y-4">
             <div className="flex items-start">
               <h3 className="text-sm font-semibold mr-auto">Log segment</h3>
-              <button onClick={closeModal} className="text-xs px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">×</button>
+              <IconButton onClick={closeModal} size="sm" variant="ghost" label="Close" icon={<IconClose size={14} />} />
             </div>
             <div className="text-[11px] text-gray-600 dark:text-gray-400 space-y-1">
               <div>Segment: {minutesToHHMM(selectedSegment.startMinute)} - {minutesToHHMM(selectedSegment.endMinute)}</div>
@@ -993,7 +995,7 @@ export default function WeeklyScheduleTable(){
                                   <span className="text-[9px] px-1 rounded bg-amber-200 text-amber-900 border border-amber-400">FREE {dur}m ({pct}%)</span>
                                 </div>
                               </div>
-                              <button type="button" aria-label={`Use free gap ${minutesToHHMM(it.startMin)} to ${minutesToHHMM(it.endMin)}`} onClick={()=> useGapRange(it.startMin, it.endMin)} className="text-[9px] px-1 py-0.5 rounded border border-blue-400 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30">Use</button>
+                              <Button type="button" size="sm" variant="subtle" aria-label={`Use free gap ${minutesToHHMM(it.startMin)} to ${minutesToHHMM(it.endMin)}`} onClick={()=> useGapRange(it.startMin, it.endMin)}>Use</Button>
                             </li>
                           );
                         } else {
@@ -1022,22 +1024,19 @@ export default function WeeklyScheduleTable(){
                                     </div>
                                   </div>
                                   <div className="flex flex-col gap-1">
-                                    <button type="button" aria-label={`Edit log ${minutesToHHMM(it.startMin)} to ${minutesToHHMM(it.endMin)}`} disabled={modalLogSaving} onClick={()=> beginEditModalLog(l)} className="text-[9px] px-1 py-0.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50">Edit</button>
-                                    <button
+                                    <Button type="button" size="sm" variant="subtle" aria-label={`Edit log ${minutesToHHMM(it.startMin)} to ${minutesToHHMM(it.endMin)}`} disabled={modalLogSaving} onClick={()=> beginEditModalLog(l)} leftIcon={<IconEdit size={14} />}>Edit</Button>
+                                    <Button
                                       type="button"
+                                      size="sm"
+                                      variant="danger"
                                       aria-label={pendingDeleteLogId === l.id ? 'Confirm delete log' : 'Delete log'}
                                       disabled={modalLogSaving}
                                       onClick={()=> deleteModalLog(l)}
-                                      className={
-                                        `text-[9px] px-1 py-0.5 rounded border disabled:opacity-50 ` +
-                                        (pendingDeleteLogId === l.id
-                                          ? 'border-red-600 bg-red-600 text-white animate-pulse'
-                                          : 'border-red-400 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30')
-                                      }
-                                      title={pendingDeleteLogId === l.id ? 'Click to confirm delete' : 'Delete log'}
+                                      leftIcon={<IconTrash size={14} />}
+                                      className={pendingDeleteLogId === l.id ? 'animate-pulse' : undefined}
                                     >
-                                      {pendingDeleteLogId === l.id ? 'Confirm' : 'Del'}
-                                    </button>
+                                      {pendingDeleteLogId === l.id ? 'Confirm' : 'Delete'}
+                                    </Button>
                                   </div>
                                 </div>
                               )}
@@ -1090,8 +1089,8 @@ export default function WeeklyScheduleTable(){
                                     <input type="text" placeholder="Comment" value={editModalLogDraft.comment} onChange={e=> setEditModalLogDraft(d=> d? {...d, comment: e.target.value }: d)} className="w-full border rounded px-2 py-1 text-[10px] dark:bg-gray-950 dark:border-gray-700" />
                                   </div>
                                   <div className="flex justify-end gap-2 pt-1">
-                                    <button type="button" disabled={modalLogSaving} onClick={cancelEditModalLog} className="text-[9px] px-2 py-0.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50">Cancel</button>
-                                    <button type="button" disabled={modalLogSaving} onClick={()=> saveModalLog(l)} className="text-[9px] px-2 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50">{modalLogSaving ? 'Saving…' : 'Save'}</button>
+                                    <Button type="button" size="sm" variant="ghost" disabled={modalLogSaving} onClick={cancelEditModalLog} leftIcon={<IconClose size={14} />}>Cancel</Button>
+                                    <Button type="button" size="sm" variant="primary" disabled={modalLogSaving} onClick={()=> saveModalLog(l)} leftIcon={<IconSave size={14} />}>{modalLogSaving ? 'Saving…' : 'Save'}</Button>
                                   </div>
                                 </div>
                               )}
@@ -1126,22 +1125,19 @@ export default function WeeklyScheduleTable(){
                                 </div>
                               </div>
                               <div className="flex flex-col gap-1">
-                                <button type="button" aria-label={`Edit log ${tm(st)} to ${tm(et)}`} disabled={modalLogSaving} onClick={()=> beginEditModalLog(l)} className="text-[9px] px-1 py-0.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50">Edit</button>
-                                <button
+                                <Button type="button" size="sm" variant="subtle" aria-label={`Edit log ${tm(st)} to ${tm(et)}`} disabled={modalLogSaving} onClick={()=> beginEditModalLog(l)} leftIcon={<IconEdit size={14} />}>Edit</Button>
+                                <Button
                                   type="button"
+                                  size="sm"
+                                  variant="danger"
                                   aria-label={pendingDeleteLogId === l.id ? 'Confirm delete log' : 'Delete log'}
                                   disabled={modalLogSaving}
                                   onClick={()=> deleteModalLog(l)}
-                                  className={
-                                    `text-[9px] px-1 py-0.5 rounded border disabled:opacity-50 ` +
-                                    (pendingDeleteLogId === l.id
-                                      ? 'border-red-600 bg-red-600 text-white animate-pulse'
-                                      : 'border-red-400 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30')
-                                  }
-                                  title={pendingDeleteLogId === l.id ? 'Click to confirm delete' : 'Delete log'}
+                                  leftIcon={<IconTrash size={14} />}
+                                  className={pendingDeleteLogId === l.id ? 'animate-pulse' : undefined}
                                 >
-                                  {pendingDeleteLogId === l.id ? 'Confirm' : 'Del'}
-                                </button>
+                                  {pendingDeleteLogId === l.id ? 'Confirm' : 'Delete'}
+                                </Button>
                               </div>
                             </div>
                           )}
@@ -1194,8 +1190,8 @@ export default function WeeklyScheduleTable(){
                                 <input type="text" placeholder="Comment" value={editModalLogDraft.comment} onChange={e=> setEditModalLogDraft(d=> d? {...d, comment: e.target.value }: d)} className="w-full border rounded px-2 py-1 text-[10px] dark:bg-gray-950 dark:border-gray-700" />
                               </div>
                               <div className="flex justify-end gap-2 pt-1">
-                                <button type="button" disabled={modalLogSaving} onClick={cancelEditModalLog} className="text-[9px] px-2 py-0.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50">Cancel</button>
-                                <button type="button" disabled={modalLogSaving} onClick={()=> saveModalLog(l)} className="text-[9px] px-2 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50">{modalLogSaving ? 'Saving…' : 'Save'}</button>
+                                <Button type="button" size="sm" variant="ghost" disabled={modalLogSaving} onClick={cancelEditModalLog} leftIcon={<IconClose size={14} />}>Cancel</Button>
+                                <Button type="button" size="sm" variant="primary" disabled={modalLogSaving} onClick={()=> saveModalLog(l)} leftIcon={<IconSave size={14} />}>{modalLogSaving ? 'Saving…' : 'Save'}</Button>
                               </div>
                             </div>
                           )}
@@ -1207,7 +1203,7 @@ export default function WeeklyScheduleTable(){
               )}
               {modalLogs.length > 0 && (modalLogs.length % MODAL_LOGS_PAGE_SIZE === 0) && (
                 <div className="pt-1 flex justify-center">
-                  <button type="button" disabled={modalLogsLoading} onClick={()=> setModalLogsPage(p=>p+1)} className="text-[10px] px-2 py-0.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50">Load more</button>
+                  <Button type="button" size="sm" variant="secondary" disabled={modalLogsLoading} onClick={()=> setModalLogsPage(p=>p+1)}>Load more</Button>
                 </div>
               )}
             </div>
@@ -1253,7 +1249,7 @@ export default function WeeklyScheduleTable(){
                 <input type="text" maxLength={300} value={comment} onChange={e=>setComment(e.target.value)} placeholder="Optional comment" className="w-full border rounded p-1 text-xs dark:bg-gray-950 dark:border-gray-700" />
               </label>
               <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={closeModal} disabled={saving} className="text-xs px-2 py-1 rounded border dark:border-gray-600 disabled:opacity-50">Cancel</button>
+                <Button type="button" size="sm" variant="ghost" onClick={closeModal} disabled={saving} leftIcon={<IconClose size={14} />}>Cancel</Button>
                 <button disabled={saving} className="text-xs px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50">{saving ? 'Saving...' : 'Log Time'}</button>
               </div>
             </form>
@@ -1278,8 +1274,8 @@ export default function WeeklyScheduleTable(){
               );
             })()}
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={()=> setExpandPrompt(null)} className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">Cancel</button>
-              <button type="button" onClick={async ()=> {
+              <Button type="button" size="sm" variant="ghost" onClick={()=> setExpandPrompt(null)} leftIcon={<IconClose size={14} />}>Cancel</Button>
+              <Button type="button" size="sm" variant="primary" leftIcon={<IconSave size={14} />} onClick={async ()=> {
                 if(!expandPrompt) return;
                 const seg = segments.find(s=>s.id===expandPrompt.segmentId);
                 if(!seg){ setExpandPrompt(null); return; }
@@ -1311,7 +1307,7 @@ export default function WeeklyScheduleTable(){
                   setModalLogSaving(false);
                   setExpandPrompt(null);
                 }
-              }} className="text-xs px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50">Apply & Save Log</button>
+              }}>Apply & Save Log</Button>
             </div>
           </div>
         </div>

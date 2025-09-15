@@ -9,6 +9,20 @@
 html { scrollbar-gutter: stable both-edges; }
 body { overflow-y: scroll; }
 
+/* Global default transitions for interactive elements */
+button, a, input, select, textarea, [role="button"] {
+	transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, box-shadow 180ms ease, transform 160ms ease, opacity 160ms ease;
+}
+
+/* Motion reduction respect */
+@media (prefers-reduced-motion: reduce) {
+	button, a, input, select, textarea, [role="button"], .transition-all, .transition-colors, .transition-opacity {
+		transition: none !important;
+		animation-duration: 1ms !important;
+		animation-iteration-count: 1 !important;
+	}
+}
+
 /* Custom scrollbar only on desktop screens */
 @media (min-width: 768px) {
 	html {
@@ -50,3 +64,98 @@ body { overflow-y: scroll; }
 .animate-fade-slide {
 	animation: fade-slide-up 220ms ease both;
 }
+
+@keyframes fade-scale-in {
+	from { opacity: 0; transform: scale(.95); }
+	to { opacity: 1; transform: scale(1); }
+}
+@keyframes fade-out {
+	from { opacity: 1; }
+	to { opacity: 0; }
+}
+@keyframes pulse-soft {
+	0%,100% { box-shadow: 0 0 0 0 rgba(59,130,246,0.0); }
+	50% { box-shadow: 0 0 0 4px rgba(59,130,246,0.15); }
+}
+
+.animate-fade-scale-in { animation: fade-scale-in 180ms cubic-bezier(.4,.2,.2,1) both; }
+.animate-fade-out { animation: fade-out 140ms ease forwards; }
+.animate-pulse-soft { animation: pulse-soft 2200ms ease-in-out infinite; }
+
+/* Utility classes for subtle elevation transitions */
+.elevation-transition { transition: box-shadow 200ms ease, transform 160ms ease; }
+.elevation-transition:hover { box-shadow: 0 4px 18px -4px rgba(0,0,0,0.15), 0 2px 6px -1px rgba(0,0,0,0.1); }
+.dark .elevation-transition:hover { box-shadow: 0 4px 18px -4px rgba(0,0,0,0.55), 0 2px 6px -1px rgba(0,0,0,0.45); }
+
+/* Focus ring refinement to avoid jumpy layout */
+*:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring-color, rgba(59,130,246,0.5)); }
+.dark *:focus-visible { box-shadow: 0 0 0 2px var(--ring-color, rgba(96,165,250,0.55)); }
+
+/* Optional fade-in for pages / sections */
+.page-enter { opacity: 0; }
+.page-enter-active { opacity: 1; transition: opacity 220ms ease; }
+
+/* Panel utilities for consistent spacing & elevation (primary surface) */
+/* Avoid @apply to keep vanilla CSS parser happy (Tailwind will still tree-shake related classes in markup) */
+.tt-panel { background-color:#ffffff; border:1px solid #e5e7eb; border-radius:0.375rem; box-shadow:0 1px 2px 0 rgba(0,0,0,0.05); }
+.dark .tt-panel { background-color:#111827; border-color:#1f2937; }
+.tt-panel-padding { padding:1rem; }
+/* Compact panel padding variant for dense data tables or lists */
+.tt-panel-pad-sm { padding:0.5rem 0.75rem; }
+
+/* Typography scale adjustments */
+.tt-heading-page { font-size:1.25rem; line-height:1.75rem; font-weight:600; letter-spacing:-0.01em; }
+@media (min-width:768px){ .tt-heading-page { font-size:1.5rem; line-height:2rem; } }
+.tt-heading-section { font-size:11px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:#6b7280; }
+.dark .tt-heading-section { color:#9ca3af; }
+.tt-text-muted { color:#6b7280; }
+.dark .tt-text-muted { color:#9ca3af; }
+
+/* Fine-tuned label style reuse */
+.tt-label { display:block; font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:#6b7280; }
+.dark .tt-label { color:#9ca3af; }
+
+/* Unified form control styling (.tt-input) for inputs & selects */
+.tt-input { width:100%; border:1px solid #d1d5db; background:#ffffff; border-radius:0.375rem; padding:0.25rem 0.5rem; font-size:0.8125rem; line-height:1.25rem; }
+.tt-input:focus { outline:none; box-shadow:0 0 0 2px rgba(59,130,246,0.35); border-color:#3b82f6; }
+.dark .tt-input { background:#0f172a; border-color:#374151; color:#e2e8f0; }
+.dark .tt-input:focus { border-color:#60a5fa; box-shadow:0 0 0 2px rgba(96,165,250,0.4); }
+.tt-input[disabled] { opacity:0.55; cursor:not-allowed; }
+
+/* Motion-safe elevation wrapper: only apply hover elevation on devices that support hover & fine pointer */
+@media (hover:hover) and (pointer:fine) {
+	.tt-hover-elevate-safe { transition: box-shadow 200ms ease, transform 160ms ease; }
+	.tt-hover-elevate-safe:hover { box-shadow:0 4px 18px -4px rgba(0,0,0,0.15), 0 2px 6px -1px rgba(0,0,0,0.1); }
+	.dark .tt-hover-elevate-safe:hover { box-shadow:0 4px 18px -4px rgba(0,0,0,0.55), 0 2px 6px -1px rgba(0,0,0,0.45); }
+}
+
+/* Alternate panel (low emphasis) : use for secondary / contextual surfaces */
+.tt-panel-alt { background-color:#f8fafc; border:1px dashed #d1d5db; border-radius:0.375rem; }
+.dark .tt-panel-alt { background-color:#1f2937; border-color:#374151; }
+.tt-panel-alt.tt-panel-padding { padding:1rem; }
+
+/* Form grid utility: responsive form layout. Use span helpers for wider controls */
+.tt-form-grid { display:grid; grid-template-columns:1fr; gap:1rem; }
+@media (min-width:640px){ .tt-form-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (min-width:960px){ .tt-form-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+.tt-form-span-2 { grid-column:span 2 / span 2; }
+.tt-form-span-3 { grid-column:span 3 / span 3; }
+@media (max-width:639.5px){
+	/* On small screens force spans to full width */
+	.tt-form-span-2, .tt-form-span-3 { grid-column:1 / -1; }
+}
+
+/* Badge system: semantic pills for metadata/status. data-variant + data-size control appearance */
+.tt-badge { --tt-badge-bg:#f1f5f9; --tt-badge-color:#475569; --tt-badge-border:#e2e8f0; display:inline-flex; align-items:center; gap:0.35rem; font-size:10px; line-height:1; font-weight:500; padding:0.25rem 0.5rem; border-radius:0.375rem; border:1px solid var(--tt-badge-border); background:var(--tt-badge-bg); color:var(--tt-badge-color); }
+.dark .tt-badge { --tt-badge-bg:#1e293b; --tt-badge-color:#cbd5e1; --tt-badge-border:#334155; }
+.tt-badge[data-variant="blue"] { --tt-badge-bg:#eff6ff; --tt-badge-color:#1d4ed8; --tt-badge-border:#bfdbfe; }
+.dark .tt-badge[data-variant="blue"] { --tt-badge-bg:#1e3a8a; --tt-badge-color:#bfdbfe; --tt-badge-border:#1d4ed8; }
+.tt-badge[data-variant="amber"] { --tt-badge-bg:#fffbeb; --tt-badge-color:#b45309; --tt-badge-border:#fde68a; }
+.dark .tt-badge[data-variant="amber"] { --tt-badge-bg:#78350f; --tt-badge-color:#fcd34d; --tt-badge-border:#d97706; }
+.tt-badge[data-variant="red"] { --tt-badge-bg:#fef2f2; --tt-badge-color:#b91c1c; --tt-badge-border:#fecaca; }
+.dark .tt-badge[data-variant="red"] { --tt-badge-bg:#7f1d1d; --tt-badge-color:#fecaca; --tt-badge-border:#dc2626; }
+.tt-badge[data-variant="green"] { --tt-badge-bg:#f0fdf4; --tt-badge-color:#15803d; --tt-badge-border:#bbf7d0; }
+.dark .tt-badge[data-variant="green"] { --tt-badge-bg:#14532d; --tt-badge-color:#bbf7d0; --tt-badge-border:#15803d; }
+.tt-badge[data-size="sm"] { font-size:10px; padding:0.15rem 0.4rem; }
+
+

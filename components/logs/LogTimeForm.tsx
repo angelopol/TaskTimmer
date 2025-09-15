@@ -335,7 +335,7 @@ export default function LogTimeForm(){
       {/* Active week banner */}
       <ActiveWeekBanner weekStart={weekStart} />
       <div className="flex items-center gap-3">
-        <h1 className="text-lg font-semibold mr-auto">Log Time</h1>
+        <h1 className="tt-heading-page mr-auto">Log Time</h1>
         <div className="flex items-center gap-1 text-[10px]">
           <button type="button" onClick={()=>{ gotoPrevWeek(); }} className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">◀</button>
           <button type="button" onClick={()=>{ gotoThisWeek(); setDate(isoDate(new Date())); }} className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">Hoy</button>
@@ -354,23 +354,23 @@ export default function LogTimeForm(){
       {loading && <div className="text-sm">Loading...</div>}
       <div className="grid gap-8 md:grid-cols-2 items-start">
       {!loading && (
-        <form onSubmit={editingLogId ? saveEdit : submit} className="space-y-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded p-4 shadow-sm">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs">
-            <label className="space-y-1 col-span-2">
-              <span className="block text-[11px] uppercase tracking-wide text-gray-500">Date</span>
-              <input type="date" value={date} onChange={e=>setDate(e.target.value)} required className="w-full border rounded p-1 dark:bg-gray-950 dark:border-gray-700" />
+        <form onSubmit={editingLogId ? saveEdit : submit} className="tt-panel tt-panel-padding space-y-4">
+          <div className="tt-form-grid text-xs">
+            <label className="space-y-1 tt-form-span-2">
+              <span className="tt-label">Date</span>
+              <input type="date" value={date} onChange={e=>setDate(e.target.value)} required className="tt-input" />
             </label>
             <label className="space-y-1">
-              <span className="block text-[11px] uppercase tracking-wide text-gray-500">Start</span>
-              <input type="time" value={start} onChange={e=>{ setStart(e.target.value); setUserEditedTime(true); }} required className="w-full border rounded p-1 dark:bg-gray-950 dark:border-gray-700" />
+              <span className="tt-label">Start</span>
+              <input type="time" value={start} onChange={e=>{ setStart(e.target.value); setUserEditedTime(true); }} required className="tt-input" />
             </label>
             <label className="space-y-1">
-              <span className="block text-[11px] uppercase tracking-wide text-gray-500">End</span>
-              <input type="time" value={end} onChange={e=>{ setEnd(e.target.value); setUserEditedTime(true); }} required className="w-full border rounded p-1 dark:bg-gray-950 dark:border-gray-700" />
+              <span className="tt-label">End</span>
+              <input type="time" value={end} onChange={e=>{ setEnd(e.target.value); setUserEditedTime(true); }} required className="tt-input" />
             </label>
-            <label className="space-y-1 col-span-2 sm:col-span-3">
-              <span className="block text-[11px] uppercase tracking-wide text-gray-500">Activity</span>
-              <select value={activityId} onChange={e=>{ setActivityId(e.target.value); setSegmentId(''); setUserEditedTime(false); }} className="w-full border rounded p-1 dark:bg-gray-950 dark:border-gray-700">
+            <label className="space-y-1 tt-form-span-3">
+              <span className="tt-label">Activity</span>
+              <select value={activityId} onChange={e=>{ setActivityId(e.target.value); setSegmentId(''); setUserEditedTime(false); }} className="tt-input">
                 <option value="">-- None --</option>
                 {activities.map(a=> <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
@@ -378,14 +378,14 @@ export default function LogTimeForm(){
                 <div className="text-[10px] text-amber-600 mt-1">No activities loaded. Create one in Activities page.</div>
               )}
             </label>
-            <label className="space-y-1 col-span-2 sm:col-span-3">
-              <span className="block text-[11px] uppercase tracking-wide text-gray-500 flex items-center gap-2">Segment <span className="text-[10px] font-normal text-gray-400">(optional)</span></span>
-              <select value={segmentId} onChange={e=>onSelectSegment(e.target.value)} className="w-full border rounded p-1 dark:bg-gray-950 dark:border-gray-700">
+            <label className="space-y-1 tt-form-span-3">
+              <span className="tt-label flex items-center gap-2">Segment <span className="text-[10px] font-normal text-gray-400">(optional)</span></span>
+              <select value={segmentId} onChange={e=>onSelectSegment(e.target.value)} className="tt-input">
                 <option value="">-- None --</option>
                 {segmentsForDay.map(s=> <option key={s.id} value={s.id}>{minutesToHHMM(s.startMinute)}-{minutesToHHMM(s.endMinute)} {s.activity?.name || ''}</option>)}
               </select>
               {autoSelected && (
-                <span className="relative group inline-flex items-center mt-1 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 cursor-help">
+                <span className="relative group inline-flex items-center mt-1 tt-badge" data-variant="blue">
                   auto
                   <span className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity absolute left-full ml-2 top-1/2 -translate-y-1/2 whitespace-nowrap bg-gray-900 text-white px-2 py-1 rounded text-[10px] z-10 shadow">
                     Selected automatically because it is the only matching segment for date & activity
@@ -393,31 +393,31 @@ export default function LogTimeForm(){
                 </span>
               )}
             </label>
-            <div className="col-span-2 sm:col-span-3 flex flex-wrap items-center gap-2">
+            <div className="tt-form-span-3 flex flex-wrap items-center gap-2">
               <label className="flex items-center gap-1 text-[11px] text-gray-600 dark:text-gray-400">
                 <input type="checkbox" checked={autoSelectEnabled} onChange={e=>{ setAutoSelectEnabled(e.target.checked); if(typeof window !== 'undefined'){ window.localStorage.setItem('logs_auto_select_segments', e.target.checked ? '1':'0'); } if(!e.target.checked) setAutoSelected(false); }} className="h-3 w-3" />
                 <span>Auto-select segment</span>
               </label>
-              {userEditedTime && <span className="text-[10px] text-amber-600">custom time</span>}
+              {userEditedTime && <span className="tt-badge" data-variant="amber">custom time</span>}
               {userEditedTime && segmentId && (
-                <button type="button" onClick={resetToSegmentTimes} className="text-[10px] px-1.5 py-0.5 rounded border border-blue-300 text-blue-600 dark:border-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30">
+                <button type="button" onClick={resetToSegmentTimes} className="tt-badge" data-variant="blue">
                   Reset segment times
                 </button>
               )}
             </div>
             <label className="space-y-1">
-              <span className="block text-[11px] uppercase tracking-wide text-gray-500">Source</span>
-              <select value={source} onChange={e=>setSource(e.target.value as Source)} className="w-full border rounded p-1 dark:bg-gray-950 dark:border-gray-700">
+              <span className="tt-label">Source</span>
+              <select value={source} onChange={e=>setSource(e.target.value as Source)} className="tt-input">
                 {SOURCES.map(s=> <option key={s} value={s}>{s}</option>)}
               </select>
             </label>
             <label className="space-y-1 flex items-end gap-2">
-              <span className="block text-[11px] uppercase tracking-wide text-gray-500">Partial</span>
+              <span className="tt-label">Partial</span>
               <input type="checkbox" checked={partial} onChange={e=>setPartial(e.target.checked)} className="h-4 w-4" />
             </label>
-            <label className="space-y-1 col-span-2 sm:col-span-3">
-              <span className="block text-[11px] uppercase tracking-wide text-gray-500">Comment</span>
-              <input type="text" maxLength={300} value={comment} onChange={e=>setComment(e.target.value)} placeholder="Optional comment" className="w-full border rounded p-1 dark:bg-gray-950 dark:border-gray-700" />
+            <label className="space-y-1 tt-form-span-3">
+              <span className="tt-label">Comment</span>
+              <input type="text" maxLength={300} value={comment} onChange={e=>setComment(e.target.value)} placeholder="Optional comment" className="tt-input" />
             </label>
           </div>
           <div className="flex justify-end gap-2">
@@ -432,7 +432,7 @@ export default function LogTimeForm(){
       )}
 
       {!loading && (
-        <div className="md:border md:border-gray-200 md:dark:border-gray-700 md:rounded md:p-4 md:bg-white md:dark:bg-gray-900 md:shadow-sm space-y-3">
+        <div className="tt-panel tt-panel-padding space-y-3">
           <div className="flex flex-wrap items-end gap-3">
             <h2 className="text-sm font-medium mr-auto">This Week Logs</h2>
             <div className="flex flex-col text-[10px] gap-1">
@@ -485,26 +485,26 @@ export default function LogTimeForm(){
               return (
                 <div key={l.id} className={`flex flex-wrap gap-2 items-center border border-gray-200 dark:border-gray-700 rounded px-2 py-1 bg-white dark:bg-gray-900 ${editingLogId===l.id ? 'ring-1 ring-blue-400' : ''}`}>
                   <span className="font-mono">{l.startedAt.substring(11,16)}-{l.endedAt.substring(11,16)}</span>
-                  <span className="text-[10px] text-gray-500">{Math.round((new Date(l.endedAt).getTime()-new Date(l.startedAt).getTime())/60000)}m</span>
+                  <span className="tt-badge" data-size="sm">{Math.round((new Date(l.endedAt).getTime()-new Date(l.startedAt).getTime())/60000)}m</span>
                   {act && (
-                    <span className="inline-flex items-center gap-1 px-1 rounded bg-gray-100 dark:bg-gray-800">
+                    <span className="tt-badge" data-size="sm">
                       <span className="w-2 h-2 rounded-full" style={{ backgroundColor: act.color || '#666' }} />
-                      <span className="text-[11px] leading-none">{act.name}</span>
+                      <span className="leading-none">{act.name}</span>
                     </span>
                   )}
-                  {l.source !== 'PLANNED' && <span className="px-1 rounded bg-gray-100 dark:bg-gray-800">{l.source}</span>}
-                  {l.partial && <span className="text-amber-600">partial</span>}
+                  {l.source !== 'PLANNED' && <span className="tt-badge" data-size="sm" data-variant="blue">{l.source}</span>}
+                  {l.partial && <span className="tt-badge" data-size="sm" data-variant="amber">partial</span>}
                   {l.comment && <span className="truncate max-w-[160px] text-gray-500">{l.comment}</span>}
                   <div className="ml-auto flex gap-1">
                     {pendingDeleteId === l.id ? (
                       <>
-                        <button onClick={()=>removeLog(l.id)} className="px-1 text-xs text-red-700 bg-red-100 dark:bg-red-900/40 rounded">Confirm?</button>
-                        <button onClick={()=>setPendingDeleteId(null)} className="px-1 text-xs rounded hover:bg-gray-100 dark:hover:bg-gray-800">Cancel</button>
+                        <button onClick={()=>removeLog(l.id)} className="tt-badge" data-variant="red">Confirm?</button>
+                        <button onClick={()=>setPendingDeleteId(null)} className="tt-badge" data-variant="neutral">Cancel</button>
                       </>
                     ) : (
                       <>
-                        <button onClick={()=>startEdit(l)} className="px-1 text-xs rounded hover:bg-gray-100 dark:hover:bg-gray-800">Edit</button>
-                        <button onClick={()=>removeLog(l.id)} className="px-1 text-xs text-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900/30">Del</button>
+                        <button onClick={()=>startEdit(l)} className="tt-badge" data-size="sm">Edit</button>
+                        <button onClick={()=>removeLog(l.id)} className="tt-badge" data-size="sm" data-variant="red">Del</button>
                       </>
                     )}
                   </div>
