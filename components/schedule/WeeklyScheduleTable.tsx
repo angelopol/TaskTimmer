@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, IconButton } from '../ui/Button';
-import { IconChevronLeft, IconChevronRight, IconReload, IconEdit, IconSave, IconClose, IconTrash } from '../ui/icons';
+import { IconChevronLeft, IconChevronRight, IconEdit, IconSave, IconClose, IconTrash } from '../ui/icons';
 import { minutesToHHMM, WEEKDAY_NAMES_LONG, combineDateAndTime } from '../../lib/time';
 import { useWeek } from '../week/WeekContext';
 import { useToast } from '../toast/ToastProvider';
@@ -22,9 +22,7 @@ type Source = typeof SOURCES[number];
 export default function WeeklyScheduleTable(){
   const { weekStart, gotoPrevWeek, gotoNextWeek, gotoThisWeek, weekRangeLabel } = useWeek();
   const [segments, setSegments] = useState<Segment[]>([]);
-  const [historicalMode, setHistoricalMode] = useState(false);
-  const [snapshotInfo, setSnapshotInfo] = useState<string | null>(null);
-  const [fetchCount, setFetchCount] = useState(0); // debug: how many times segments load ran
+  // Removed historical snapshot mode & fetch counters
   const lastLoadKeyRef = useRef<string>(''); // prevent duplicate loads for same key (weekStart|mode)
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,7 +101,7 @@ export default function WeeklyScheduleTable(){
   }
 
   useEffect(()=>{
-    const key = weekStart + '|' + (historicalMode ? 'H':'C');
+    const key = weekStart; // simplified key (historical mode removed)
     if(lastLoadKeyRef.current === key){
       return; // already loaded this combination (guards StrictMode double invoke)
     }
@@ -112,9 +110,8 @@ export default function WeeklyScheduleTable(){
       try {
         setLoading(true);
         const params = new URLSearchParams();
-        // Always send weekStart so backend can produce stable snapshot if historical
+        // Always send weekStart so backend can produce stable snapshot server-side (historical mode removed)
         params.set('weekStart', weekStart);
-        if(historicalMode) params.set('historical','1');
         const segUrl = `/api/schedule/segments?${params.toString()}`;
         const [segRes, actRes] = await Promise.all([
           fetch(segUrl, { cache: 'no-store' }),
@@ -124,8 +121,6 @@ export default function WeeklyScheduleTable(){
         if(!segRes.ok) throw new Error(segData.error || 'Failed to load segments');
         const segs = segData.segments || [];
         setSegments(segs);
-        setSnapshotInfo(segData.mode === 'historical' ? segData.snapshot : null);
-  setFetchCount(c=>c+1);
         const actData = await actRes.json();
         if(!actRes.ok) throw new Error(actData.error || 'Failed to load activities');
         setActivities(actData.activities || []);
@@ -147,7 +142,7 @@ export default function WeeklyScheduleTable(){
       } catch(e:any){ setError(e.message); }
       finally { setLoading(false); }
     })();
-  }, [weekStart, historicalMode]);
+  }, [weekStart]);
 
   // Ref para prevenir cargas duplicadas de free logs en StrictMode / renders repetidos
   const lastFreeLogsKeyRef = useRef<string>('');
@@ -1006,16 +1001,7 @@ export default function WeeklyScheduleTable(){
           <Button size="sm" variant="secondary" onClick={gotoThisWeek}>This week</Button>
           <IconButton size="sm" variant="subtle" label="Next week" onClick={gotoNextWeek} icon={<IconChevronRight size={14} />} />
         </div>
-        <label className="flex items-center gap-1 ml-2 text-[10px] px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 cursor-pointer select-none">
-          <input type="checkbox" className="h-3 w-3" checked={historicalMode} onChange={e=>setHistoricalMode(e.target.checked)} />
-          <span>Historical snapshot</span>
-        </label>
-        {historicalMode && (
-          <span className="text-[10px] px-2 py-1 rounded bg-purple-600 text-white">Snapshot: {snapshotInfo || weekStart}</span>
-        )}
-        {/* Debug toggle removed */}
-        <span className="text-[10px] px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 select-none">fetch#{fetchCount}</span>
-  <Button type="button" size="sm" variant="secondary" leftIcon={<IconReload size={14} />} onClick={()=>loadFreeLogs()}>Reload free logs</Button>
+        {/* Historical snapshot, fetch counter & manual reload removed */}
       </div>
       {loading && <div className="text-sm">Loading...</div>}
   {!loading && loadingFreeLogs && <div className="text-xs text-amber-600 flex items-center gap-2"><span className="w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />Loading free logs…</div>}

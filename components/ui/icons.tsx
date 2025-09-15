@@ -59,12 +59,6 @@ export const IconTrash = createIcon(<>
   <path d="M5 6l1 14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-14" />
 </>, 'IconTrash');
 
-export const IconReload = createIcon(<>
-  <path d="M21 2v6h-6" />
-  <path d="M3 12a9 9 0 0 1 15-6" />
-  <path d="M3 22v-6h6" />
-  <path d="M21 12a9 9 0 0 1-15 6" />
-</>, 'IconReload');
 
 export const IconChevronLeft = createIcon(<polyline points="15 18 9 12 15 6" />, 'IconChevronLeft');
 export const IconChevronRight = createIcon(<polyline points="9 18 15 12 9 6" />, 'IconChevronRight');
@@ -144,7 +138,6 @@ export const icons = {
   plus: IconAdd,
   edit: IconEdit,
   trash: IconTrash,
-  reload: IconReload,
   left: IconChevronLeft,
   right: IconChevronRight,
   clock: IconClock,

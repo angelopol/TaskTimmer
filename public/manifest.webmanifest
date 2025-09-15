@@ -3,7 +3,7 @@
   "name": "TaskTimmer",
   "short_name": "TaskTimmer",
   "description": "Activity-based time management and logging",
-  "start_url": "/dashboard?source=pwa",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#111827",
