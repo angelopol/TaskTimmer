@@ -9,6 +9,8 @@
     "lint": "next lint",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+  "migrate:deploy": "prisma migrate deploy",
+  "migrate:prod": "npm run prisma:generate && npm run migrate:deploy",
     "seed": "tsx prisma/seed.ts",
     "fix:timestamps": "ts-node -P tsconfig.scripts.json scripts/fixLocalTimestamps.ts",
     "migrate:fix-dates": "ts-node -P tsconfig.scripts.json scripts/migrations/fix_timelog_dates.ts",

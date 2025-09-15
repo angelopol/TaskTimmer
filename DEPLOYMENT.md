@@ -44,6 +44,26 @@ datasource db {
 ## 5. Running Migrations
 Vercel build environment is read-only regarding running interactive migrations. Use one of:
 
+### Provided NPM Scripts
+Production-safe scripts now included in `package.json`:
+
+| Script | Purpose |
+|--------|---------|
+| `npm run migrate:deploy` | Applies already-generated migrations to the target DB |
+| `npm run migrate:prod` | Runs `prisma generate` then `prisma migrate deploy` (convenience) |
+
+Example (PowerShell) applying to a staging database (temporary inline env vars):
+```powershell
+$env:DB_PROVIDER="mysql"; $env:DATABASE_URL="mysql://user:pass@host:3306/db"; $env:NEXTAUTH_SECRET="base64secret"; npm run migrate:prod
+```
+
+If your environment variables are already configured in the shell/session you can simply run:
+```powershell
+npm run migrate:deploy
+```
+
+After the first deploy (migrations applied), subsequent deploys succeed automatically unless new migration files are added. Always generate migrations locally via `npx prisma migrate dev` before committing.
+
 ### Option A: prisma migrate deploy (recommended)
 1. Ensure all migrations exist locally via `npx prisma migrate dev` (this generates SQL in `prisma/migrations/`).
 2. Commit the migrations folder.
