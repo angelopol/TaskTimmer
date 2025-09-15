@@ -466,13 +466,13 @@ export default function WeeklyScheduleTable(){
         window.dispatchEvent(new CustomEvent('timelog:created'));
       }
       closeModal();
-      addToast({ message:'Log created', type:'success'});
+  addToast({ message:'Created log', type:'success'});
       refreshSegmentUsage();
       // Reload modal logs after creation (if still open)
       if(open){
         fetchModalLogs(selectedSegment, 0, true);
       }
-    } catch(e:any){ setModalError(e.message); }
+  } catch(e:any){ setModalError(e.message); addToast({ type:'error', message: e.message || 'Failed to create log' }); }
     finally { setSaving(false); }
   }
 
@@ -518,7 +518,7 @@ export default function WeeklyScheduleTable(){
       const startIdx = page * MODAL_LOGS_PAGE_SIZE;
       const pageItems = filtered.slice(startIdx, startIdx + MODAL_LOGS_PAGE_SIZE);
       setModalLogs(prev => replace ? pageItems : [...prev, ...pageItems]);
-    } catch(e:any){ setModalError(e.message); }
+  } catch(e:any){ setModalError(e.message); addToast({ type:'error', message: e.message || 'Failed to update log' }); }
     finally { setModalLogsLoading(false); }
   }
 
@@ -599,8 +599,8 @@ export default function WeeklyScheduleTable(){
         // Refresh free logs regardless (covers free & segment edits impacting free cells)
         loadFreeLogs();
       }
-      addToast({ message: 'Log updated', type: 'success' });
-    } catch(e:any){ setModalError(e.message); }
+  addToast({ message: 'Updated log', type: 'success' });
+  } catch(e:any){ setModalError(e.message); addToast({ type:'error', message: e.message || 'Failed to delete log' }); }
     finally { setModalLogSaving(false); }
   }
 
@@ -624,7 +624,7 @@ export default function WeeklyScheduleTable(){
       setModalLogs(curr => curr.filter(x=>x.id !== l.id));
       refreshSegmentUsage();
       loadFreeLogs();
-      addToast({ message: 'Log deleted', type: 'success' });
+  addToast({ message: 'Deleted log', type: 'success' });
     } catch(e:any){ setModalError(e.message); }
     finally { setModalLogSaving(false); }
   }

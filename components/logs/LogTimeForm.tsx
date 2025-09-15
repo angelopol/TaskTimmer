@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { minutesToHHMM, hhmmToMinutes, WEEKDAY_NAMES_SHORT, isoDate, combineDateAndTime, mondayOf } from '../../lib/time';
 import { useWeek } from '../week/WeekContext';
+import { useToast } from '../toast/ToastProvider';
 
 interface Activity { id: string; name: string; color: string | null; }
 interface Segment { id: string; weekday: number; startMinute: number; endMinute: number; activityId: string | null; notes: string | null; activity?: Activity | null; }
@@ -30,6 +31,7 @@ function ActiveWeekBanner({ weekStart }: { weekStart: string }){
 
 export default function LogTimeForm(){
   const { weekStart, setWeekStart, gotoPrevWeek, gotoNextWeek, gotoThisWeek } = useWeek();
+  const { addToast } = useToast();
   const todayISO = isoDate(new Date());
   const [date, setDate] = useState(todayISO);
   const [start, setStart] = useState('09:00');
@@ -250,15 +252,13 @@ export default function LogTimeForm(){
       const res = await fetch('/api/logs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = await res.json();
       if(!res.ok) throw new Error(data.error || 'Save failed');
-      // Insert into recent logs local list
-  // refetch to maintain ordering and counts
-  await loadAll();
+      await loadAll();
       if(typeof window !== 'undefined'){
         window.dispatchEvent(new CustomEvent('timelog:created'));
       }
-      // Reset minimal fields (keep date to speed input)
+  addToast({ type:'success', message:'Created log' });
       setStart('09:00'); setEnd('10:00'); setPartial(false); setComment(''); setSegmentId('');
-    } catch(e:any){ setError(e.message); }
+  } catch(e:any){ setError(e.message); addToast({ type:'error', message: e.message || 'Failed to create log' }); }
     finally { setSaving(false); }
   }
 
@@ -297,16 +297,17 @@ export default function LogTimeForm(){
         source,
         comment: comment.trim() || null
       };
-  const res = await fetch(`/api/logs?id=${editingLogId}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+      const res = await fetch(`/api/logs?id=${editingLogId}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
       const data = await res.json();
       if(!res.ok) throw new Error(data.error || 'Update failed');
-  await loadAll();
+      await loadAll();
       if(typeof window !== 'undefined'){
         window.dispatchEvent(new CustomEvent('timelog:created'));
       }
+  addToast({ type:'success', message:'Updated log' });
       setEditingLogId(null);
       setComment('');
-    } catch(e:any){ setError(e.message); }
+  } catch(e:any){ setError(e.message); addToast({ type:'error', message: e.message || 'Failed to update log' }); }
     finally { setEditSaving(false); }
   }
 
@@ -324,8 +325,9 @@ export default function LogTimeForm(){
       if(typeof window !== 'undefined'){
         window.dispatchEvent(new CustomEvent('timelog:created'));
       }
+  addToast({ type:'success', message:'Deleted log' });
       if(editingLogId === id) setEditingLogId(null);
-    } catch(e:any){ setError(e.message); }
+  } catch(e:any){ setError(e.message); addToast({ type:'error', message: e.message || 'Failed to delete log' }); }
   }
 
   return (

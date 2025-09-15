@@ -1,9 +1,11 @@
 "use client";
 import React, { useEffect, useState } from 'react';
+import { useToast } from '../toast/ToastProvider';
 
 interface Activity { id: string; name: string; color: string | null; weeklyTargetMinutes: number; createdAt: string; }
 
 export default function ActivitiesClient() {
+  const { addToast } = useToast();
   const [items, setItems] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -22,6 +24,7 @@ export default function ActivitiesClient() {
       setItems(json.activities || []);
     } catch (e:any) {
       setError(e.message);
+      addToast({ message: e.message || 'Load error', type: 'error' });
     } finally { setLoading(false); }
   }
   useEffect(()=>{ load(); }, []);
@@ -34,7 +37,8 @@ export default function ActivitiesClient() {
       if (!res.ok) throw new Error('Create failed');
       setForm({ name: '', color: '#2563eb', weeklyTargetMinutes: 0 });
       load();
-    } catch (e:any) { setError(e.message); } finally { setCreating(false); }
+  } catch (e:any) { setError(e.message); addToast({ message: e.message || 'Failed to create activity', type: 'error' }); } finally { setCreating(false); }
+  if(!error) addToast({ message: 'Created activity', type: 'success' });
   }
 
   function startEdit(it: Activity) {
@@ -48,7 +52,8 @@ export default function ActivitiesClient() {
       if (!res.ok) throw new Error('Update failed');
       setEditingId(null);
       load();
-    } catch (e:any) { setError(e.message); }
+  } catch (e:any) { setError(e.message); addToast({ message: e.message || 'Failed to update activity', type: 'error' }); return; }
+  addToast({ message: 'Updated activity', type: 'success' });
   }
 
   async function remove(id: string) {
@@ -64,7 +69,8 @@ export default function ActivitiesClient() {
       if (!res.ok) throw new Error('Delete failed');
       setPendingDeleteId(null);
       load();
-    } catch (e:any) { setError(e.message); }
+  } catch (e:any) { setError(e.message); addToast({ message: e.message || 'Failed to delete activity', type: 'error' }); return; }
+  addToast({ message: 'Deleted activity', type: 'success' });
   }
 
   return (
