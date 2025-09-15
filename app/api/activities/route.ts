@@ -15,7 +15,8 @@ const updateSchema = createSchema.partial();
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions as any);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const userId = (session as any).userId;
+  const userId = (session as any).userId as string | null | undefined;
+  if(!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
   if (id) {
@@ -30,7 +31,8 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions as any);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const userId = (session as any).userId;
+  const userId = (session as any).userId as string | null | undefined;
+  if(!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   let dataRaw: any;
   try { dataRaw = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
   const parse = createSchema.safeParse(dataRaw);
@@ -47,7 +49,8 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   const session = await getServerSession(authOptions as any);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const userId = (session as any).userId;
+  const userId = (session as any).userId as string | null | undefined;
+  if(!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'Missing id param ?id=' }, { status: 400 });
@@ -67,7 +70,8 @@ export async function PATCH(req: Request) {
 export async function DELETE(req: Request) {
   const session = await getServerSession(authOptions as any);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const userId = (session as any).userId;
+  const userId = (session as any).userId as string | null | undefined;
+  if(!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });

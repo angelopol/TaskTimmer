@@ -16,7 +16,8 @@ function endOfWeek(date: Date) { const s = startOfWeek(date); const e = new Date
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions as any);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const userId = (session as any).userId;
+  const userId = (session as any).userId as string | null | undefined;
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
   const weekStartParam = searchParams.get('weekStart');

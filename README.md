@@ -117,6 +117,10 @@ The app registers a service worker (`public/sw.js`) maintaining a versioned cach
 ## Deployment
 For a full Vercel deployment guide (environment variables, MySQL provisioning, Prisma migrate steps, seeding, and PWA considerations) see `DEPLOYMENT.md`.
 
+### Session Expiration & 401 Handling
+
+API routes now enforce presence of a valid `userId` via a global `middleware.ts` (matcher `/api/:path*`). When a JWT has expired according to the custom logic in `nextAuthOptions` (which removes `userId`), the middleware returns `401 Unauthorized` early. On the client, `useApiClient` automatically triggers `signOut()` and redirects to `/login` on any 401 to avoid Prisma validation errors caused by `null userId` conditions. If you add new API calls, prefer using the `apiFetch` wrapper for consistent behavior.
+
 ## Roadmap / Next Steps
 - Activity & segment management UI enhancements.
 - Editable time logs (update/delete).

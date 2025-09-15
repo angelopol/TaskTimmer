@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { useApiClient } from '../useApiClient';
 import { minutesToHHMM, hhmmToMinutes, WEEKDAY_NAMES_SHORT, isoDate, combineDateAndTime, mondayOf } from '../../lib/time';
 import { useWeek } from '../week/WeekContext';
 import { useToast } from '../toast/ToastProvider';
@@ -72,6 +73,7 @@ export default function LogTimeForm(){
   });
   const [userEditedTime, setUserEditedTime] = useState(false);
   // Removed debug load counter (loadCount)
+  const { apiFetch } = useApiClient();
   const lastLoadedWeekRef = useRef<string | null>(null); // last fully loaded weekStart
   const loadingWeekRef = useRef<string | null>(null); // week currently in-flight
 
@@ -125,30 +127,23 @@ export default function LogTimeForm(){
     if(order) qs.set('order', order);
     // weekStart basado en la fecha seleccionada para que siempre veas la semana de esa fecha
   qs.set('weekStart', weekStart);
-    const [actResRaw, segResRaw, logsResRaw] = await Promise.all([
-      fetch('/api/activities').catch(e=>e),
-      fetch('/api/schedule/segments').catch(e=>e),
-      fetch('/api/logs?'+qs.toString()).catch(e=>e)
+    const [actRes, segRes, logsRes] = await Promise.all([
+      apiFetch('/api/activities'),
+      apiFetch('/api/schedule/segments'),
+      apiFetch('/api/logs?'+qs.toString())
     ]);
-    let actRes: any = null, segRes: any = null, logsRes: any = null;
     const problems: string[] = [];
-    try { if(actResRaw instanceof Response){ actRes = await actResRaw.json(); } else { problems.push('activities fetch failed'); } } catch { problems.push('activities parse failed'); }
-    try { if(segResRaw instanceof Response){ segRes = await segResRaw.json(); } else { problems.push('segments fetch failed'); } } catch { problems.push('segments parse failed'); }
-    try { if(logsResRaw instanceof Response){ logsRes = await logsResRaw.json(); } else { problems.push('logs fetch failed'); } } catch { problems.push('logs parse failed'); }
-    // Set partial data even if others failed
-    if(actRes && !actRes.error){ setActivities(actRes.activities || []); } else if(actRes?.error){ problems.push(`activities: ${actRes.error}`); }
-    if(segRes && !segRes.error){ setSegments(segRes.segments || []); } else if(segRes?.error){ problems.push(`segments: ${segRes.error}`); }
-    if(logsRes && !logsRes.error){
-      setRecentLogs(logsRes.logs || []);
-      setTotalLogs(logsRes.total || 0);
-    } else if(logsRes?.error){ problems.push(`logs: ${logsRes.error}`); }
-    if(!actRes && !segRes && !logsRes){
+    if(actRes.ok){ setActivities((actRes.data as any)?.activities || []); } else { problems.push(`activities: ${actRes.error}`); }
+    if(segRes.ok){ setSegments((segRes.data as any)?.segments || []); } else { problems.push(`segments: ${segRes.error}`); }
+    if(logsRes.ok){
+      setRecentLogs((logsRes.data as any)?.logs || []);
+      setTotalLogs((logsRes.data as any)?.total || 0);
+    } else { problems.push(`logs: ${logsRes.error}`); }
+    if(problems.length === 3){
       setError('All requests failed');
     } else if(problems.length){
       setError(problems.join(' | '));
-    } else {
-      setError(null);
-    }
+    } else { setError(null); }
     // Mark week loaded (only after finishing; even if partial errors we consider it attempted)
     lastLoadedWeekRef.current = weekStart;
     loadingWeekRef.current = null;
@@ -248,9 +243,8 @@ export default function LogTimeForm(){
         source,
         comment: comment.trim() || null
       };
-      const res = await fetch('/api/logs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const data = await res.json();
-      if(!res.ok) throw new Error(data.error || 'Save failed');
+  const res = await apiFetch('/api/logs', { method: 'POST', json: body });
+  if(!res.ok) throw new Error(res.error || 'Save failed');
       await loadAll();
       if(typeof window !== 'undefined'){
         window.dispatchEvent(new CustomEvent('timelog:created'));
@@ -296,9 +290,8 @@ export default function LogTimeForm(){
         source,
         comment: comment.trim() || null
       };
-      const res = await fetch(`/api/logs?id=${editingLogId}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
-      const data = await res.json();
-      if(!res.ok) throw new Error(data.error || 'Update failed');
+  const res = await apiFetch(`/api/logs?id=${editingLogId}`, { method:'PATCH', json: body });
+  if(!res.ok) throw new Error(res.error || 'Update failed');
       await loadAll();
       if(typeof window !== 'undefined'){
         window.dispatchEvent(new CustomEvent('timelog:created'));
@@ -317,9 +310,8 @@ export default function LogTimeForm(){
       return;
     }
     try {
-      const res = await fetch(`/api/logs?id=${id}`, { method:'DELETE' });
-      const data = await res.json();
-      if(!res.ok) throw new Error(data.error || 'Delete failed');
+  const res = await apiFetch(`/api/logs?id=${id}`, { method:'DELETE' });
+  if(!res.ok) throw new Error(res.error || 'Delete failed');
       await loadAll();
       if(typeof window !== 'undefined'){
         window.dispatchEvent(new CustomEvent('timelog:created'));
