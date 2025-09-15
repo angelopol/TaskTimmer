@@ -38,6 +38,17 @@ export default function WeeklyScheduleTable(){
   const [comment, setComment] = useState('');
   const [saving, setSaving] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
+  // Modal logs state (existing logs inside selected segment / free interval)
+  const [modalLogs, setModalLogs] = useState<any[]>([]);
+  const [modalLogsLoading, setModalLogsLoading] = useState(false);
+  const [modalLogsPage, setModalLogsPage] = useState(0);
+  const MODAL_LOGS_PAGE_SIZE = 20;
+  const [editingModalLogId, setEditingModalLogId] = useState<string | null>(null);
+  const [editModalLogDraft, setEditModalLogDraft] = useState<{ start: string; end: string; activityId: string; source: Source; partial: boolean; comment: string; } | null>(null);
+  const [modalLogSaving, setModalLogSaving] = useState(false);
+  const [pendingDeleteLogId, setPendingDeleteLogId] = useState<string | number | null>(null); // two-step delete
+  // Segment expansion prompt state
+  const [expandPrompt, setExpandPrompt] = useState<null | { segmentId: string; newStart: number; newEnd: number; logId: string; startedAt: string; endedAt: string; }>(null);
   const { addToast } = useToast();
   const [segmentLoggedMinutes, setSegmentLoggedMinutes] = useState<Record<string, number>>({});
   const [segmentDominantActivity, setSegmentDominantActivity] = useState<Record<string,{ activityId: string | null; minutes: number }>>({});
@@ -410,6 +421,8 @@ export default function WeeklyScheduleTable(){
     setSource('PLANNED');
     setComment('');
     setModalError(null);
+    setModalLogs([]);
+    setModalLogsPage(0);
     setOpen(true);
   }
 
@@ -417,6 +430,7 @@ export default function WeeklyScheduleTable(){
     if(saving) return;
     setOpen(false);
     setSelectedSegment(null);
+    setModalLogs([]);
   }
 
   async function submitModal(e: React.FormEvent){
@@ -452,8 +466,172 @@ export default function WeeklyScheduleTable(){
       closeModal();
       addToast({ message:'Log created', type:'success'});
       refreshSegmentUsage();
+      // Reload modal logs after creation (if still open)
+      if(open){
+        fetchModalLogs(selectedSegment, 0, true);
+      }
     } catch(e:any){ setModalError(e.message); }
     finally { setSaving(false); }
+  }
+
+  // Fetch logs that fall within the selected segment or free interval boundaries for its weekday.
+  async function fetchModalLogs(seg: Segment | TempFreeSlot, page: number, replace = false){
+    try {
+      setModalLogsLoading(true);
+      const date = weekDateForWeekday(seg.weekday);
+      // We'll fetch all logs for that date within ±1 day boundary via API filter by date, then filter client-side to the interval.
+      const params = new URLSearchParams();
+      params.set('weekStart', weekStart); // ensures same week scoping
+      params.set('date', date); // limit to the calendar day
+      params.set('limit', '100'); // grab enough to filter
+      params.set('order', 'asc');
+      if(!('temp' in seg)){
+        // For segment choose segmentId filter to reduce server volume
+        params.set('segmentId', seg.id);
+      }
+      const res = await fetch(`/api/logs?${params.toString()}`, { cache: 'no-store' });
+      const data = await res.json();
+      if(!res.ok) throw new Error(data.error || 'Failed to fetch logs');
+      let logs: any[] = data.logs || [];
+      // If free interval (temp) include ONLY unsegmented logs overlapping the interval
+      // If segment interval, we already filtered by segmentId (logs variable already appropriate)
+      const intervalStart = seg.startMinute;
+      const intervalEnd = seg.endMinute;
+      if('temp' in seg){
+        logs = logs.filter(l => !l.segmentId); // free logs only
+      }
+      // Additional client-side overlap filter (safety) by comparing startedAt/endedAt minute offsets
+      const filtered = logs.filter(l => {
+        const st = new Date(l.startedAt);
+        const et = new Date(l.endedAt);
+        if(et <= st) return false;
+        const dayStart = new Date(st.getFullYear(), st.getMonth(), st.getDate(), 0,0,0,0);
+        const startM = Math.floor((st.getTime() - dayStart.getTime())/60000);
+        const endM = Math.ceil((et.getTime() - dayStart.getTime())/60000 - 1e-9);
+        return endM > intervalStart && startM < intervalEnd; // overlap
+      });
+      // Sort ascending by startedAt (already asc if order=asc but keep for safety) then stable.
+      filtered.sort((a,b)=> new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
+      // Simple pagination client-side (slice)
+      const startIdx = page * MODAL_LOGS_PAGE_SIZE;
+      const pageItems = filtered.slice(startIdx, startIdx + MODAL_LOGS_PAGE_SIZE);
+      setModalLogs(prev => replace ? pageItems : [...prev, ...pageItems]);
+    } catch(e:any){ setModalError(e.message); }
+    finally { setModalLogsLoading(false); }
+  }
+
+  // Load logs on modal open & when page increments
+  useEffect(()=>{
+    if(!open || !selectedSegment) return;
+    fetchModalLogs(selectedSegment, modalLogsPage, modalLogsPage===0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, selectedSegment, modalLogsPage]);
+
+  function beginEditModalLog(l: any){
+    if(modalLogSaving) return;
+    const st = new Date(l.startedAt);
+    const et = new Date(l.endedAt);
+    const pad = (n:number)=> n.toString().padStart(2,'0');
+    const hhmm = (d:Date)=> `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    setEditingModalLogId(l.id);
+    setEditModalLogDraft({
+      start: hhmm(st),
+      end: hhmm(et),
+      activityId: l.activity?.id || '',
+      source: l.source as Source,
+      partial: !!l.partial,
+      comment: l.comment || ''
+    });
+  }
+
+  function cancelEditModalLog(){
+    if(modalLogSaving) return;
+    setEditingModalLogId(null);
+    setEditModalLogDraft(null);
+  }
+
+  async function saveModalLog(l: any){
+    if(!editModalLogDraft || modalLogSaving || expandPrompt) return;
+    try {
+      setModalLogSaving(true);
+      const date = weekDateForWeekday(selectedSegment!.weekday);
+      // Build startedAt/endedAt with combineDateAndTime so we preserve local timezone semantics
+      const startedAt = combineDateAndTime(date, editModalLogDraft.start);
+      const endedAt = combineDateAndTime(date, editModalLogDraft.end);
+      if(new Date(endedAt) <= new Date(startedAt)) throw new Error('End must be after start');
+      // Validate within segment / free interval bounds
+      if(selectedSegment){
+        const newStartMin = timeStrToMinutes(editModalLogDraft.start);
+        const newEndMin = timeStrToMinutes(editModalLogDraft.end);
+        if(!( 'temp' in selectedSegment) && (newStartMin < selectedSegment.startMinute || newEndMin > selectedSegment.endMinute)){
+          // Show styled expansion modal instead of confirm
+          setExpandPrompt({
+            segmentId: selectedSegment.id,
+            newStart: Math.min(newStartMin, selectedSegment.startMinute),
+            newEnd: Math.max(newEndMin, selectedSegment.endMinute),
+            logId: l.id,
+            startedAt,
+            endedAt
+          });
+          setModalLogSaving(false);
+          return; // wait for user decision
+        }
+      }
+      const body: any = {
+        activityId: editModalLogDraft.activityId || null,
+        startedAt, endedAt,
+        source: editModalLogDraft.source,
+        partial: editModalLogDraft.partial,
+        comment: editModalLogDraft.comment.trim() || null
+      };
+      const res = await fetch(`/api/logs?id=${l.id}`, { method: 'PATCH', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(body) });
+      const data = await res.json();
+      if(!res.ok) throw new Error(data.error || 'Update failed');
+      // Update local list
+      setModalLogs(curr => curr.map(x => x.id === l.id ? { ...x, ...data.log } : x));
+      setEditingModalLogId(null);
+      setEditModalLogDraft(null);
+      refreshSegmentUsage();
+      // Also refresh free logs panel if editing a free log
+      if(selectedSegment){
+        // Refresh free logs regardless (covers free & segment edits impacting free cells)
+        loadFreeLogs();
+      }
+      addToast({ message: 'Log updated', type: 'success' });
+    } catch(e:any){ setModalError(e.message); }
+    finally { setModalLogSaving(false); }
+  }
+
+  async function deleteModalLog(l: any){
+    if(modalLogSaving) return;
+    // Two-step inline confirmation: first click arms, second click executes within 4s window
+    if(pendingDeleteLogId !== l.id){
+      setPendingDeleteLogId(l.id);
+      setTimeout(()=>{
+        setPendingDeleteLogId(curr => curr === l.id ? null : curr);
+      }, 4000);
+      return;
+    }
+    try {
+      setModalLogSaving(true);
+      const res = await fetch(`/api/logs?id=${l.id}`, { method: 'DELETE' });
+      if(!res.ok){
+        const data = await res.json();
+        throw new Error(data.error || 'Delete failed');
+      }
+      setModalLogs(curr => curr.filter(x=>x.id !== l.id));
+      refreshSegmentUsage();
+      loadFreeLogs();
+      addToast({ message: 'Log deleted', type: 'success' });
+    } catch(e:any){ setModalError(e.message); }
+    finally { setModalLogSaving(false); }
+  }
+
+  function useGapRange(startMin: number, endMin: number){
+    if(!selectedSegment) return;
+    setUseFullRange(false);
+    setStartHHMM(minutesToHHMM(startMin));
+    setEndHHMM(minutesToHHMM(endMin));
   }
 
   return (
@@ -761,6 +939,274 @@ export default function WeeklyScheduleTable(){
               <div>Weekday: {WEEKDAY_NAMES_LONG[selectedSegment.weekday-1]}</div>
               <div>Planned Activity: {'temp' in selectedSegment ? '—' : (selectedSegment.activity?.name || '—')}</div>
             </div>
+            {/* Existing logs list */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold">Existing logs{('temp' in selectedSegment) ? ' (free interval)' : ''}</span>
+                {modalLogsLoading && <span className="text-[10px] text-blue-500">loading…</span>}
+              </div>
+              {modalLogs.length === 0 && !modalLogsLoading && (
+                <div className="text-[10px] text-gray-500">No logs in this interval.</div>
+              )}
+              {modalLogs.length > 0 && (
+                <ul className="max-h-40 overflow-auto divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded text-[10px]">
+                  {(() => {
+                    if(selectedSegment && !('temp' in selectedSegment)){
+                      // Compute gaps inside the segment
+                      const segStart = selectedSegment.startMinute;
+                      const segEnd = selectedSegment.endMinute;
+                      const logEntries = modalLogs.map(l => {
+                        const st = new Date(l.startedAt); const et = new Date(l.endedAt);
+                        const startMin = st.getHours()*60 + st.getMinutes();
+                        const endMin = et.getHours()*60 + et.getMinutes();
+                        return { l, startMin: Math.max(segStart, startMin), endMin: Math.min(segEnd, endMin) };
+                      }).filter(e => e.endMin > e.startMin) // sanity
+                        .sort((a,b)=> a.startMin - b.startMin);
+                      const gaps: { id:string; startMin:number; endMin:number; }[] = [];
+                      let cursor = segStart;
+                      for(const e of logEntries){
+                        if(e.startMin > cursor){
+                          gaps.push({ id: `gap-${cursor}-${e.startMin}`, startMin: cursor, endMin: e.startMin });
+                        }
+                        cursor = Math.max(cursor, e.endMin);
+                      }
+                      if(cursor < segEnd){
+                        gaps.push({ id: `gap-${cursor}-${segEnd}`, startMin: cursor, endMin: segEnd });
+                      }
+                      // Build unified timeline (gaps + logs) sorted by start
+                      const items: Array<{ type:'gap'; id:string; startMin:number; endMin:number } | { type:'log'; id:string; data:any; startMin:number; endMin:number }> = [];
+                      for(const g of gaps) items.push({ type:'gap', id:g.id, startMin:g.startMin, endMin:g.endMin });
+                      for(const e of logEntries) items.push({ type:'log', id:e.l.id, data:e.l, startMin:e.startMin, endMin:e.endMin });
+                      items.sort((a,b)=> a.startMin - b.startMin || (a.type==='gap'? -1:1));
+                      const segDur = segEnd - segStart;
+                      return items.map(it => {
+                        if(it.type === 'gap'){
+                          const dur = it.endMin - it.startMin;
+                          const pct = Math.round((dur / segDur)*100);
+                          return (
+                            <li key={it.id} className="flex items-center gap-2 px-2 py-1 bg-amber-50 dark:bg-amber-900/20">
+                              <div className="flex-1 flex flex-col">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-mono">{minutesToHHMM(it.startMin)}-{minutesToHHMM(it.endMin)}</span>
+                                  <span className="text-[9px] px-1 rounded bg-amber-200 text-amber-900 border border-amber-400">FREE {dur}m ({pct}%)</span>
+                                </div>
+                              </div>
+                              <button type="button" onClick={()=> useGapRange(it.startMin, it.endMin)} className="text-[9px] px-1 py-0.5 rounded border border-blue-400 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30">Use</button>
+                            </li>
+                          );
+                        } else {
+                          const l = it.data;
+                          const st = new Date(l.startedAt); const et = new Date(l.endedAt);
+                          const pad = (n:number)=> n.toString().padStart(2,'0');
+                          const tm = (d:Date)=> `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                          const dur = l.minutes ?? Math.round((et.getTime()-st.getTime())/60000);
+                          const editing = editingModalLogId === l.id && editModalLogDraft;
+                          return (
+                            <li key={l.id} className="flex flex-col gap-1 px-2 py-1">
+                              {!editing && (
+                                <div className="flex items-start gap-2">
+                                  <div className="flex-1">
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      <span className="font-mono">{tm(st)}-{tm(et)}</span>
+                                      <span className="text-[9px] px-1 rounded bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600">{dur}m</span>
+                                      {l.partial && <span className="text-[8px] px-1 rounded bg-pink-600 text-white">PART</span>}
+                                      <span className="text-[8px] px-1 rounded bg-blue-600 text-white">{l.source}</span>
+                                    </div>
+                                    <div className="truncate">
+                                      {l.activity ? (
+                                        <span className="font-medium" style={ l.activity.color ? { color: l.activity.color } : undefined }>{l.activity.name}</span>
+                                      ) : <span className="italic text-gray-500">(no activity)</span>}
+                                      {l.comment && <span className="ml-1 text-gray-500">— {l.comment}</span>}
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <button type="button" disabled={modalLogSaving} onClick={()=> beginEditModalLog(l)} className="text-[9px] px-1 py-0.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50">Edit</button>
+                                    <button
+                                      type="button"
+                                      disabled={modalLogSaving}
+                                      onClick={()=> deleteModalLog(l)}
+                                      className={
+                                        `text-[9px] px-1 py-0.5 rounded border disabled:opacity-50 ` +
+                                        (pendingDeleteLogId === l.id
+                                          ? 'border-red-600 bg-red-600 text-white animate-pulse'
+                                          : 'border-red-400 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30')
+                                      }
+                                      title={pendingDeleteLogId === l.id ? 'Click to confirm delete' : 'Delete log'}
+                                    >
+                                      {pendingDeleteLogId === l.id ? 'Confirm' : 'Del'}
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                              {editing && editModalLogDraft && (
+                                <div className="space-y-1 border border-blue-300 dark:border-blue-700 rounded p-2 bg-blue-50 dark:bg-blue-950/30">
+                                  <div className="flex items-center gap-2">
+                                    <label className="flex items-center gap-1 text-[9px]">Start
+                                      <input type="time" value={editModalLogDraft.start} onChange={e=> setEditModalLogDraft(d=> d? {...d, start: e.target.value }: d)} className="border rounded px-1 py-0.5 text-[10px] dark:bg-gray-950 dark:border-gray-700" />
+                                    </label>
+                                    <label className="flex items-center gap-1 text-[9px]">End
+                                      <input type="time" value={editModalLogDraft.end} onChange={e=> setEditModalLogDraft(d=> d? {...d, end: e.target.value }: d)} className="border rounded px-1 py-0.5 text-[10px] dark:bg-gray-950 dark:border-gray-700" />
+                                    </label>
+                                    <label className="flex items-center gap-1 text-[9px]">Partial
+                                      <input type="checkbox" checked={editModalLogDraft.partial} onChange={e=> setEditModalLogDraft(d=> d? {...d, partial: e.target.checked }: d)} className="h-3 w-3" />
+                                    </label>
+                                  </div>
+                                  {(() => {
+                                    if(!selectedSegment) return null;
+                                    const newStartMin = timeStrToMinutes(editModalLogDraft.start);
+                                    const newEndMin = timeStrToMinutes(editModalLogDraft.end);
+                                    const within = newStartMin >= selectedSegment.startMinute && newEndMin <= selectedSegment.endMinute;
+                                    const newDur = Math.max(0, newEndMin - newStartMin);
+                                    const st = new Date(l.startedAt); const et = new Date(l.endedAt);
+                                    const oldDur = l.minutes ?? Math.round((et.getTime()-st.getTime())/60000);
+                                    const diff = newDur - oldDur;
+                                    return (
+                                      <div className="flex items-center gap-2 text-[9px]">
+                                        <span className={`px-1 rounded ${within ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{within ? 'Within range' : 'Out of range'}</span>
+                                        <span className="font-mono">{newDur}m {diff!==0 && (<span className="ml-1">({diff>0?'+':''}{diff}m)</span>)}</span>
+                                        {!within && !( 'temp' in selectedSegment) && (
+                                          <span className="text-[8px] text-blue-600 dark:text-blue-400">(Can expand segment)</span>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+                                  <div className="flex items-center gap-2">
+                                    <label className="text-[9px]">Activity
+                                      <select value={editModalLogDraft.activityId} onChange={e=> setEditModalLogDraft(d=> d? {...d, activityId: e.target.value }: d)} className="ml-1 border rounded px-1 py-0.5 text-[10px] dark:bg-gray-950 dark:border-gray-700">
+                                        <option value="">(none)</option>
+                                        {activities.map(a=> <option key={a.id} value={a.id}>{a.name}</option>)}
+                                      </select>
+                                    </label>
+                                    <label className="text-[9px]">Source
+                                      <select value={editModalLogDraft.source} onChange={e=> setEditModalLogDraft(d=> d? {...d, source: e.target.value as Source }: d)} className="ml-1 border rounded px-1 py-0.5 text-[10px] dark:bg-gray-950 dark:border-gray-700">
+                                        {SOURCES.map(s=> <option key={s} value={s}>{s}</option>)}
+                                      </select>
+                                    </label>
+                                  </div>
+                                  <div>
+                                    <input type="text" placeholder="Comment" value={editModalLogDraft.comment} onChange={e=> setEditModalLogDraft(d=> d? {...d, comment: e.target.value }: d)} className="w-full border rounded px-2 py-1 text-[10px] dark:bg-gray-950 dark:border-gray-700" />
+                                  </div>
+                                  <div className="flex justify-end gap-2 pt-1">
+                                    <button type="button" disabled={modalLogSaving} onClick={cancelEditModalLog} className="text-[9px] px-2 py-0.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50">Cancel</button>
+                                    <button type="button" disabled={modalLogSaving} onClick={()=> saveModalLog(l)} className="text-[9px] px-2 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50">{modalLogSaving ? 'Saving…' : 'Save'}</button>
+                                  </div>
+                                </div>
+                              )}
+                            </li>
+                          );
+                        }
+                      });
+                    }
+                    // Fallback: just logs (e.g., free interval / temp segment)
+                    return modalLogs.map(l => {
+                      const st = new Date(l.startedAt); const et = new Date(l.endedAt);
+                      const pad = (n:number)=> n.toString().padStart(2,'0');
+                      const tm = (d:Date)=> `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                      const dur = l.minutes ?? Math.round((et.getTime()-st.getTime())/60000);
+                      const editing = editingModalLogId === l.id && editModalLogDraft;
+                      return (
+                        <li key={l.id} className="flex flex-col gap-1 px-2 py-1">
+                          {!editing && (
+                            <div className="flex items-start gap-2">
+                              <div className="flex-1">
+                                <div className="flex flex-wrap items-center gap-1">
+                                  <span className="font-mono">{tm(st)}-{tm(et)}</span>
+                                  <span className="text-[9px] px-1 rounded bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600">{dur}m</span>
+                                  {l.partial && <span className="text-[8px] px-1 rounded bg-pink-600 text-white">PART</span>}
+                                  <span className="text-[8px] px-1 rounded bg-blue-600 text-white">{l.source}</span>
+                                </div>
+                                <div className="truncate">
+                                  {l.activity ? (
+                                    <span className="font-medium" style={ l.activity.color ? { color: l.activity.color } : undefined }>{l.activity.name}</span>
+                                  ) : <span className="italic text-gray-500">(no activity)</span>}
+                                  {l.comment && <span className="ml-1 text-gray-500">— {l.comment}</span>}
+                                </div>
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <button type="button" disabled={modalLogSaving} onClick={()=> beginEditModalLog(l)} className="text-[9px] px-1 py-0.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50">Edit</button>
+                                <button
+                                  type="button"
+                                  disabled={modalLogSaving}
+                                  onClick={()=> deleteModalLog(l)}
+                                  className={
+                                    `text-[9px] px-1 py-0.5 rounded border disabled:opacity-50 ` +
+                                    (pendingDeleteLogId === l.id
+                                      ? 'border-red-600 bg-red-600 text-white animate-pulse'
+                                      : 'border-red-400 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30')
+                                  }
+                                  title={pendingDeleteLogId === l.id ? 'Click to confirm delete' : 'Delete log'}
+                                >
+                                  {pendingDeleteLogId === l.id ? 'Confirm' : 'Del'}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          {editing && editModalLogDraft && (
+                            <div className="space-y-1 border border-blue-300 dark:border-blue-700 rounded p-2 bg-blue-50 dark:bg-blue-950/30">
+                              <div className="flex items-center gap-2">
+                                <label className="flex items-center gap-1 text-[9px]">Start
+                                  <input type="time" value={editModalLogDraft.start} onChange={e=> setEditModalLogDraft(d=> d? {...d, start: e.target.value }: d)} className="border rounded px-1 py-0.5 text-[10px] dark:bg-gray-950 dark:border-gray-700" />
+                                </label>
+                                <label className="flex items-center gap-1 text-[9px]">End
+                                  <input type="time" value={editModalLogDraft.end} onChange={e=> setEditModalLogDraft(d=> d? {...d, end: e.target.value }: d)} className="border rounded px-1 py-0.5 text-[10px] dark:bg-gray-950 dark:border-gray-700" />
+                                </label>
+                                <label className="flex items-center gap-1 text-[9px]">Partial
+                                  <input type="checkbox" checked={editModalLogDraft.partial} onChange={e=> setEditModalLogDraft(d=> d? {...d, partial: e.target.checked }: d)} className="h-3 w-3" />
+                                </label>
+                              </div>
+                              {(() => {
+                                if(!selectedSegment) return null;
+                                const newStartMin = timeStrToMinutes(editModalLogDraft.start);
+                                const newEndMin = timeStrToMinutes(editModalLogDraft.end);
+                                const within = newStartMin >= selectedSegment.startMinute && newEndMin <= selectedSegment.endMinute;
+                                const newDur = Math.max(0, newEndMin - newStartMin);
+                                const st = new Date(l.startedAt); const et = new Date(l.endedAt);
+                                const oldDur = l.minutes ?? Math.round((et.getTime()-st.getTime())/60000);
+                                const diff = newDur - oldDur;
+                                return (
+                                  <div className="flex items-center gap-2 text-[9px]">
+                                    <span className={`px-1 rounded ${within ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{within ? 'Within range' : 'Out of range'}</span>
+                                    <span className="font-mono">{newDur}m {diff!==0 && (<span className="ml-1">({diff>0?'+':''}{diff}m)</span>)}</span>
+                                    {!within && !( 'temp' in selectedSegment) && (
+                                      <span className="text-[8px] text-blue-600 dark:text-blue-400">(Can expand segment)</span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                              <div className="flex items-center gap-2">
+                                <label className="text-[9px]">Activity
+                                  <select value={editModalLogDraft.activityId} onChange={e=> setEditModalLogDraft(d=> d? {...d, activityId: e.target.value }: d)} className="ml-1 border rounded px-1 py-0.5 text-[10px] dark:bg-gray-950 dark:border-gray-700">
+                                    <option value="">(none)</option>
+                                    {activities.map(a=> <option key={a.id} value={a.id}>{a.name}</option>)}
+                                  </select>
+                                </label>
+                                <label className="text-[9px]">Source
+                                  <select value={editModalLogDraft.source} onChange={e=> setEditModalLogDraft(d=> d? {...d, source: e.target.value as Source }: d)} className="ml-1 border rounded px-1 py-0.5 text-[10px] dark:bg-gray-950 dark:border-gray-700">
+                                    {SOURCES.map(s=> <option key={s} value={s}>{s}</option>)}
+                                  </select>
+                                </label>
+                              </div>
+                              <div>
+                                <input type="text" placeholder="Comment" value={editModalLogDraft.comment} onChange={e=> setEditModalLogDraft(d=> d? {...d, comment: e.target.value }: d)} className="w-full border rounded px-2 py-1 text-[10px] dark:bg-gray-950 dark:border-gray-700" />
+                              </div>
+                              <div className="flex justify-end gap-2 pt-1">
+                                <button type="button" disabled={modalLogSaving} onClick={cancelEditModalLog} className="text-[9px] px-2 py-0.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50">Cancel</button>
+                                <button type="button" disabled={modalLogSaving} onClick={()=> saveModalLog(l)} className="text-[9px] px-2 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50">{modalLogSaving ? 'Saving…' : 'Save'}</button>
+                              </div>
+                            </div>
+                          )}
+                        </li>
+                      );
+                    });
+                  })()}
+                </ul>
+              )}
+              {modalLogs.length > 0 && (modalLogs.length % MODAL_LOGS_PAGE_SIZE === 0) && (
+                <div className="pt-1 flex justify-center">
+                  <button type="button" disabled={modalLogsLoading} onClick={()=> setModalLogsPage(p=>p+1)} className="text-[10px] px-2 py-0.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50">Load more</button>
+                </div>
+              )}
+            </div>
             {modalError && <div className="text-xs text-red-600">{modalError}</div>}
             <form onSubmit={submitModal} className="space-y-3">
               <label className="block text-[11px] space-y-1">
@@ -807,6 +1253,62 @@ export default function WeeklyScheduleTable(){
                 <button disabled={saving} className="text-xs px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50">{saving ? 'Saving...' : 'Log Time'}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {expandPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-900 border border-blue-300 dark:border-blue-600 rounded shadow-lg w-full max-w-sm p-4 space-y-4">
+            <h4 className="text-sm font-semibold">Expand segment?</h4>
+            {(() => {
+              const seg = segments.find(s=>s.id===expandPrompt.segmentId);
+              if(!seg) return <div className="text-xs text-red-600">Segment not found.</div>;
+              const oldRange = `${minutesToHHMM(seg.startMinute)}-${minutesToHHMM(seg.endMinute)}`;
+              const newRange = `${minutesToHHMM(expandPrompt.newStart)}-${minutesToHHMM(expandPrompt.newEnd)}`;
+              return (
+                <div className="text-[11px] space-y-2">
+                  <div>Current segment range: <span className="font-mono">{oldRange}</span></div>
+                  <div>New segment range: <span className="font-mono text-blue-600 dark:text-blue-400">{newRange}</span></div>
+                  <div className="text-gray-600 dark:text-gray-400">The edited log exceeds the original bounds. Extending will update the segment for all future planning (current template).</div>
+                </div>
+              );
+            })()}
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={()=> setExpandPrompt(null)} className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">Cancel</button>
+              <button type="button" onClick={async ()=> {
+                if(!expandPrompt) return;
+                const seg = segments.find(s=>s.id===expandPrompt.segmentId);
+                if(!seg){ setExpandPrompt(null); return; }
+                try {
+                  setModalLogSaving(true);
+                  const segRes = await fetch(`/api/schedule/segments?id=${seg.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ startMinute: expandPrompt.newStart, endMinute: expandPrompt.newEnd }) });
+                  if(!segRes.ok){
+                    const err = await segRes.json().catch(()=>({}));
+                    addToast({ type:'error', message: err.error || 'Segment update failed' });
+                    setModalLogSaving(false);
+                    setExpandPrompt(null);
+                    return;
+                  }
+                  const segPayload = await segRes.json();
+                  setSegments(prev => prev.map(s => s.id === seg.id ? { ...s, startMinute: segPayload.segment.startMinute, endMinute: segPayload.segment.endMinute } : s));
+                  if(selectedSegment && !('temp' in selectedSegment) && selectedSegment.id === seg.id){
+                    selectedSegment.startMinute = segPayload.segment.startMinute;
+                    selectedSegment.endMinute = segPayload.segment.endMinute;
+                  }
+                  // After expanding, retry saving log using existing draft values
+                  setExpandPrompt(null);
+                  setModalLogSaving(false);
+                  const targetLog = modalLogs.find(m=> m.id === expandPrompt.logId);
+                  if(targetLog){
+                    saveModalLog(targetLog);
+                  }
+                } catch(e:any){
+                  addToast({ type:'error', message: e.message || 'Unexpected error' });
+                  setModalLogSaving(false);
+                  setExpandPrompt(null);
+                }
+              }} className="text-xs px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50">Apply & Save Log</button>
+            </div>
           </div>
         </div>
       )}

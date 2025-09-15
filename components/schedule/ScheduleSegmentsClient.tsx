@@ -25,6 +25,7 @@ export default function ScheduleSegmentsClient(){
   const [editing, setEditing] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
   const [filterWeekday, setFilterWeekday] = useState<number | 'all'>('all');
+  const [pendingDeleteSegmentId, setPendingDeleteSegmentId] = useState<string | null>(null);
 
   const loadAll = async () => {
     setLoading(true); setError(null);
@@ -84,12 +85,19 @@ export default function ScheduleSegmentsClient(){
   }
 
   async function remove(id: string){
-    if(!confirm('Delete segment?')) return;
+    if(pendingDeleteSegmentId !== id){
+      setPendingDeleteSegmentId(id);
+      setTimeout(()=>{
+        setPendingDeleteSegmentId(curr => curr === id ? null : curr);
+      }, 4000);
+      return;
+    }
     try {
       const res = await fetch(`/api/schedule/segments?id=${id}`, { method: 'DELETE' });
       const data = await res.json();
       if(!res.ok) throw new Error(data.error || 'Delete failed');
       setSegments(s => s.filter(x=>x.id!==id));
+      setPendingDeleteSegmentId(null);
     } catch(e:any){ setError(e.message); }
   }
 
@@ -121,7 +129,7 @@ export default function ScheduleSegmentsClient(){
                 {seg.notes && <span className="italic text-gray-500 truncate max-w-[120px] sm:max-w-[160px]">{seg.notes}</span>}
                 <div className="ml-auto flex gap-1">
                   <button onClick={()=>startEdit(seg)} className="px-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">Edit</button>
-                  <button onClick={()=>remove(seg.id)} className="px-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded">Del</button>
+                  <button onClick={()=>remove(seg.id)} className={"px-1 rounded " + (pendingDeleteSegmentId===seg.id ? 'bg-red-600 text-white animate-pulse' : 'text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30')}>{pendingDeleteSegmentId===seg.id? 'Confirm' : 'Del'}</button>
                 </div>
               </div>
             ))}

@@ -11,6 +11,7 @@ export default function ActivitiesClient() {
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<{ name: string; color: string; weeklyTargetMinutes: number }>({ name: '', color: '#000000', weeklyTargetMinutes: 0 });
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null); // two-step delete
 
   async function load() {
     try {
@@ -51,10 +52,17 @@ export default function ActivitiesClient() {
   }
 
   async function remove(id: string) {
-    if (!confirm('Delete activity?')) return;
+    if(pendingDeleteId !== id){
+      setPendingDeleteId(id);
+      setTimeout(()=>{
+        setPendingDeleteId(curr => curr === id ? null : curr);
+      }, 4000);
+      return;
+    }
     try {
       const res = await fetch(`/api/activities?id=${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed');
+      setPendingDeleteId(null);
       load();
     } catch (e:any) { setError(e.message); }
   }
@@ -120,7 +128,7 @@ export default function ActivitiesClient() {
                     ) : (
                       <>
                         <button onClick={()=>startEdit(it)} className="text-blue-600">Edit</button>
-                        <button onClick={()=>remove(it.id)} className="text-red-600">Del</button>
+                        <button onClick={()=>remove(it.id)} className={"text-red-600 " + (pendingDeleteId===it.id? 'font-bold animate-pulse' : '')}>{pendingDeleteId===it.id? 'Confirm' : 'Del'}</button>
                       </>
                     )}
                   </div>
@@ -176,7 +184,7 @@ export default function ActivitiesClient() {
                       ) : (
                         <>
                           <button onClick={()=>startEdit(it)} className="text-blue-600 hover:underline">Edit</button>
-                          <button onClick={()=>remove(it.id)} className="text-red-600 hover:underline">Delete</button>
+                          <button onClick={()=>remove(it.id)} className={"text-red-600 hover:underline " + (pendingDeleteId===it.id? 'font-bold animate-pulse' : '')}>{pendingDeleteId===it.id? 'Confirm' : 'Delete'}</button>
                         </>
                       )}
                     </td>
