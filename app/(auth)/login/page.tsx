@@ -7,7 +7,8 @@ import { redirect } from 'next/navigation';
 
 export default async function LoginPage() {
   const session = await getServerSession(authOptions as any);
-  if (session) redirect('/');
+  // Only consider authenticated if session has a valid userId
+  if (session && (session as any).userId) redirect('/');
   return (
     <AuthLayout title="Welcome back" subtitle="Sign in to continue tracking your time">
       <AuthCard>

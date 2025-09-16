@@ -12,13 +12,17 @@ export const authOptions: NextAuthOptions = {
       name: 'Credentials',
       credentials: {
         email: { label: 'Email', type: 'text' },
-        password: { label: 'Password', type: 'password' }
+        password: { label: 'Password', type: 'password' },
+        // include remember so NextAuth forwards it to authorize()
+        remember: { label: 'Remember', type: 'text' }
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials.password) return null;
         const user = await verifyUser(credentials.email, credentials.password);
         if (!user) return null;
-        return { id: user.id, email: user.email, name: user.name };
+        // Attach remember to the user payload so jwt callback can read it
+        const remember = (credentials as any).remember === '1' || (credentials as any).remember === 'true';
+        return { id: user.id, email: user.email, name: user.name, remember } as any;
       }
     })
   ],
@@ -28,12 +32,10 @@ export const authOptions: NextAuthOptions = {
       // On initial sign in attach userId and compute expiration based on remember flag.
       if (user) {
         token.userId = (user as any).id;
-        // Expect a custom flag passed in signIn credentials via token.remember
-        // Because credentials provider does not forward arbitrary fields automatically, we can
-        // encode remember in the token on first call by reading from (account as any)?.remember if we populate it client-side.
-        // Simpler: rely on token.remember already set in a preceding jwt callback run via trigger === 'signIn'.
-        if (typeof (token as any).remember === 'undefined') {
-          // default short if unknown
+        // Set remember based on user.remember if present, else keep existing or default false
+        if (typeof (user as any).remember !== 'undefined') {
+          (token as any).remember = !!(user as any).remember;
+        } else if (typeof (token as any).remember === 'undefined') {
           (token as any).remember = false;
         }
         const now = Date.now();

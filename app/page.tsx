@@ -7,7 +7,7 @@ import { AuthLayout, AuthCard } from '../components/auth/AuthLayout';
 
 export default async function Home() {
   const session = await getServerSession(authOptions as any);
-  if (!session) {
+  if (!session || !(session as any).userId) {
     return (
       <AuthLayout title="TaskTimmer" subtitle="Sign in to access your dashboard">
         <AuthCard>

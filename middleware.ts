@@ -17,7 +17,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
   try {
-    const token = await getToken({ req });
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
     if (!token || !(token as any).userId) {
       return new NextResponse(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
