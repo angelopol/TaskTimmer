@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../../../lib/nextAuthOptions';
+import { getToken } from 'next-auth/jwt';
 import { prisma } from '../../../lib/prisma';
 
 function startOfWeek(date: Date) { // Monday-based
@@ -14,9 +13,8 @@ function startOfWeek(date: Date) { // Monday-based
 function endOfWeek(date: Date) { const s = startOfWeek(date); const e = new Date(s); e.setUTCDate(e.getUTCDate()+7); return e; }
 
 export async function GET(req: Request) {
-  const session = await getServerSession(authOptions as any);
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const userId = (session as any).userId as string | null | undefined;
+  const token = await getToken({ req: req as any, secret: process.env.NEXTAUTH_SECRET });
+  const userId = (token as any)?.userId as string | null | undefined;
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
