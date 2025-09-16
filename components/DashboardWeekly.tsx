@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Button } from './ui/Button';
 import { IconCalendar } from './ui/icons';
+import { useApiClient } from './useApiClient';
 
 interface ActivityStat {
   id: string;
@@ -31,18 +32,25 @@ export function DashboardWeekly() {
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
+  const { apiFetch } = useApiClient();
 
   useEffect(() => {
     let aborted = false;
     (async () => {
       try {
         setLoading(true);
-        const res = await fetch('/api/dashboard');
-        if (!res.ok) throw new Error('Failed to load dashboard');
-        const json = await res.json();
-        if (!aborted) setData(json);
+        const resp = await apiFetch<DashboardResponse>('/api/dashboard');
+        if (!aborted) {
+          if (resp.ok && resp.data) {
+            setData(resp.data);
+            setError('');
+          } else if (!resp.ok) {
+            // If 401, apiFetch already triggered signOut; still surface a short error locally
+            setError(resp.error || 'Failed to load dashboard');
+          }
+        }
       } catch (e:any) {
-        if (!aborted) setError(e.message);
+        if (!aborted) setError(e.message || 'Failed to load dashboard');
       } finally {
         if (!aborted) setLoading(false);
       }
