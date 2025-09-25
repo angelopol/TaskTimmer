@@ -1,10 +1,12 @@
 "use client";
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Button } from './ui/Button';
 import { IconCalendar } from './ui/icons';
 import { useApiClient } from './useApiClient';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useUnit } from './UnitProvider';
+import { fmtMinutes, fmtHoursMinutes } from '../lib/time';
 
 interface ActivityStat {
   id: string;
@@ -36,6 +38,7 @@ export function DashboardWeekly() {
   const { apiFetch } = useApiClient();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { unit, setUnit } = useUnit();
 
   function toDateStr(d: Date) {
     return d.toISOString().substring(0,10);
@@ -54,6 +57,12 @@ export function DashboardWeekly() {
     if (param && !isNaN(new Date(param).getTime())) return param;
     return todayWeekStart;
   });
+  // If URL has unit, override provider once; otherwise keep provider's choice
+  useEffect(()=>{
+    const qp = searchParams?.get('unit');
+    if(qp === 'min' || qp === 'hr') setUnit(qp);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function goToWeek(newWeekStart: string) {
     setWeekStart(newWeekStart);
@@ -71,6 +80,14 @@ export function DashboardWeekly() {
   const nextWeek = () => goToWeek(addDays(weekStart, 7));
   const goToday = () => goToWeek(todayWeekStart);
   const nextIsFuture = addDays(weekStart, 7) > todayWeekStart; // simple string compare ok for YYYY-MM-DD
+
+  const fmt = useMemo(()=> (m: number) => (unit === 'min' ? fmtMinutes(m) : fmtHoursMinutes(m)), [unit]);
+  function setUnitAndSync(newUnit: 'min'|'hr'){
+    setUnit(newUnit);
+    const sp = new URLSearchParams(Array.from(searchParams?.entries?.() || []));
+    sp.set('unit', newUnit);
+    router.replace(`?${sp.toString()}`);
+  }
 
   useEffect(() => {
     let aborted = false;
@@ -114,6 +131,10 @@ export function DashboardWeekly() {
             <Button size="sm" variant="ghost" onClick={goToday} aria-label="Current week">Today</Button>
             <Button size="sm" variant="ghost" onClick={nextWeek} aria-label="Next week" disabled={nextIsFuture}>Next ▶</Button>
           </div>
+          <div className="flex items-center gap-1" aria-label="Units switch">
+            <Button size="sm" variant={unit==='min' ? 'primary' : 'ghost'} onClick={()=>setUnitAndSync('min')}>Min</Button>
+            <Button size="sm" variant={unit==='hr' ? 'primary' : 'ghost'} onClick={()=>setUnitAndSync('hr')}>Hours</Button>
+          </div>
           <Link href="/schedule" aria-label="Go to weekly schedule" className="group">
             <Button asChild variant="primary" size="sm" leftIcon={<IconCalendar size={14} />}>Go to schedule</Button>
           </Link>
@@ -132,7 +153,12 @@ export function DashboardWeekly() {
                   <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: a.color || '#999' }} />
                   {a.name}
                 </h3>
-                <span className="text-xs tt-text-muted">{a.done} / {a.target} min {a.over>0 && <strong className="text-red-600 ml-1">+{a.over}</strong>}</span>
+                <span className="text-xs tt-text-muted">
+                  {fmt(a.done)} / {fmt(a.target)}
+                  {a.over>0 && (
+                    <strong className="text-red-600 ml-1">+{fmt(a.over)}</strong>
+                  )}
+                </span>
               </div>
               <div className="space-y-2 mt-1 flex-1">
                 {/* Target progress bar */}
@@ -141,7 +167,7 @@ export function DashboardWeekly() {
                     <div className="h-full bg-blue-600" style={{ width: `${Math.min(100,pct)}%` }} />
                   </div>
                   <div className="flex justify-between text-[10px] text-gray-600 mt-1">
-                    <span>Target {a.target}m</span>
+                    <span>Target {fmt(a.target)}</span>
                     <span>{pct.toFixed(1)}%</span>
                   </div>
                 </div>
@@ -151,7 +177,7 @@ export function DashboardWeekly() {
                     <div className="h-full bg-emerald-600" style={{ width: `${Math.min(100,coverage)}%` }} />
                   </div>
                   <div className="flex justify-between text-[10px] text-gray-600 mt-1">
-                    <span>Planned {planned}m</span>
+                    <span>Planned {fmt(planned)}</span>
                     <span>{coverage.toFixed(1)}%</span>
                   </div>
                 </div>
@@ -159,10 +185,10 @@ export function DashboardWeekly() {
                 {sources.length > 0 && (
                   <div className="text-[11px] flex flex-wrap gap-1">
                     {sources.map(([k,v]) => (
-                      <span key={k} className="tt-badge" data-size="sm">{k}: {v}m</span>
+                      <span key={k} className="tt-badge" data-size="sm">{k}: {fmt(v)}</span>
                     ))}
-                    <span className="tt-badge" data-size="sm" data-variant="amber">Partial {a.loggedPartialMinutes}m</span>
-                    <span className="tt-badge" data-size="sm" data-variant="green">Full {a.loggedFullMinutes}m</span>
+                    <span className="tt-badge" data-size="sm" data-variant="amber">Partial {fmt(a.loggedPartialMinutes)}</span>
+                    <span className="tt-badge" data-size="sm" data-variant="green">Full {fmt(a.loggedFullMinutes)}</span>
                   </div>
                 )}
               </div>

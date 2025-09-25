@@ -1,9 +1,10 @@
 "use client";
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useApiClient } from '../useApiClient';
-import { minutesToHHMM, hhmmToMinutes, WEEKDAY_NAMES_SHORT, isoDate, combineDateAndTime, mondayOf } from '../../lib/time';
+import { minutesToHHMM, hhmmToMinutes, WEEKDAY_NAMES_SHORT, isoDate, combineDateAndTime, mondayOf, fmtMinutes, fmtHoursMinutes } from '../../lib/time';
 import { useWeek } from '../week/WeekContext';
 import { useToast } from '../toast/ToastProvider';
+import { useUnit } from '../UnitProvider';
 
 interface Activity { id: string; name: string; color: string | null; }
 interface Segment { id: string; weekday: number; startMinute: number; endMinute: number; activityId: string | null; notes: string | null; activity?: Activity | null; }
@@ -32,6 +33,7 @@ function ActiveWeekBanner({ weekStart }: { weekStart: string }){
 
 export default function LogTimeForm(){
   const { weekStart, setWeekStart, gotoPrevWeek, gotoNextWeek, gotoThisWeek } = useWeek();
+  const { unit, setUnit } = useUnit();
   const { addToast } = useToast();
   const todayISO = isoDate(new Date());
   const [date, setDate] = useState(todayISO);
@@ -332,6 +334,10 @@ export default function LogTimeForm(){
           <button type="button" onClick={()=>{ gotoThisWeek(); setDate(isoDate(new Date())); }} className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">Hoy</button>
           <button type="button" onClick={()=>{ gotoNextWeek(); }} className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">▶</button>
         </div>
+        <div className="flex items-center gap-1 ml-2" aria-label="Units switch">
+          <button type="button" onClick={()=>setUnit('min')} className={`tt-badge ${unit==='min' ? '' : 'opacity-60'}`}>Min</button>
+          <button type="button" onClick={()=>setUnit('hr')} className={`tt-badge ${unit==='hr' ? '' : 'opacity-60'}`}>Hours</button>
+        </div>
         {/* Removed load counter badge, spinner inline cluster, and manual Reload button */}
       </div>
       {error && <div className="text-sm text-red-600">{error}</div>}
@@ -466,10 +472,11 @@ export default function LogTimeForm(){
           <div className="space-y-1 text-xs max-h-[520px] overflow-auto pr-1">
             {recentLogs.map(l => {
               const act = l.activity as Activity | undefined;
+              const mins = Math.round((new Date(l.endedAt).getTime()-new Date(l.startedAt).getTime())/60000);
               return (
                 <div key={l.id} className={`flex flex-wrap gap-2 items-center border border-gray-200 dark:border-gray-700 rounded px-2 py-1 bg-white dark:bg-gray-900 ${editingLogId===l.id ? 'ring-1 ring-blue-400' : ''}`}>
                   <span className="font-mono">{l.startedAt.substring(11,16)}-{l.endedAt.substring(11,16)}</span>
-                  <span className="tt-badge" data-size="sm">{Math.round((new Date(l.endedAt).getTime()-new Date(l.startedAt).getTime())/60000)}m</span>
+                  <span className="tt-badge" data-size="sm">{unit==='min' ? fmtMinutes(mins) : fmtHoursMinutes(mins)}</span>
                   {act && (
                     <span className="tt-badge" data-size="sm">
                       <span className="w-2 h-2 rounded-full" style={{ backgroundColor: act.color || '#666' }} />

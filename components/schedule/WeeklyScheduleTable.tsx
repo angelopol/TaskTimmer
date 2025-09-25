@@ -3,9 +3,10 @@ import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, IconButton } from '../ui/Button';
 import { IconChevronLeft, IconChevronRight, IconEdit, IconSave, IconClose, IconTrash } from '../ui/icons';
-import { minutesToHHMM, WEEKDAY_NAMES_LONG, combineDateAndTime } from '../../lib/time';
+import { minutesToHHMM, WEEKDAY_NAMES_LONG, combineDateAndTime, fmtMinutes, fmtHoursMinutes } from '../../lib/time';
 import { useWeek } from '../week/WeekContext';
 import { useToast } from '../toast/ToastProvider';
+import { useUnit } from '../UnitProvider';
 
 interface Activity { id: string; name: string; color: string | null; }
 interface Segment { id: string; weekday: number; startMinute: number; endMinute: number; activityId: string | null; activity?: Activity | null; }
@@ -21,6 +22,7 @@ type Source = typeof SOURCES[number];
 
 export default function WeeklyScheduleTable(){
   const { weekStart, gotoPrevWeek, gotoNextWeek, gotoThisWeek, weekRangeLabel } = useWeek();
+  const { unit, setUnit } = useUnit();
   const [segments, setSegments] = useState<Segment[]>([]);
   // Removed historical snapshot mode & fetch counters
   const lastLoadKeyRef = useRef<string>(''); // prevent duplicate loads for same key (weekStart|mode)
@@ -1001,6 +1003,10 @@ export default function WeeklyScheduleTable(){
           <Button size="sm" variant="secondary" onClick={gotoThisWeek}>This week</Button>
           <IconButton size="sm" variant="subtle" label="Next week" onClick={gotoNextWeek} icon={<IconChevronRight size={14} />} />
         </div>
+        <div className="ml-auto flex items-center gap-1" aria-label="Units switch">
+          <Button size="sm" variant={unit==='min' ? 'primary' : 'ghost'} onClick={()=>setUnit('min')}>Min</Button>
+          <Button size="sm" variant={unit==='hr' ? 'primary' : 'ghost'} onClick={()=>setUnit('hr')}>Hours</Button>
+        </div>
         {/* Historical snapshot, fetch counter & manual reload removed */}
       </div>
       {loading && <div className="text-sm">Loading...</div>}
@@ -1038,11 +1044,12 @@ export default function WeeklyScheduleTable(){
           }
           if(freeAvailable===0) return null;
           const pct = Math.round((freeUsed / freeAvailable) * 100);
+          const fmt = (n:number)=> unit==='min' ? fmtMinutes(n) : fmtHoursMinutes(n);
           return (
             <div className="text-xs flex flex-wrap items-center gap-3 bg-gray-50 dark:bg-gray-800/40 rounded border border-gray-200 dark:border-gray-700 p-2">
               <div className="font-medium">Free time used (week):</div>
-              <div className="px-1.5 py-0.5 rounded bg-amber-500/90 text-black font-semibold">{freeUsed}m</div>
-              <div className="text-gray-600 dark:text-gray-400">/ {freeAvailable}m</div>
+              <div className="px-1.5 py-0.5 rounded bg-amber-500/90 text-black font-semibold">{fmt(freeUsed)}</div>
+              <div className="text-gray-600 dark:text-gray-400">/ {fmt(freeAvailable)}</div>
               <div className="text-gray-800 dark:text-gray-300 font-medium">({pct}%)</div>
               <div className="flex-1 h-2 rounded bg-gray-200 dark:bg-gray-700 overflow-hidden min-w-[120px]">
                 <div style={{ width: `${pct}%` }} className="h-full bg-amber-500 transition-all" />
@@ -1133,8 +1140,8 @@ export default function WeeklyScheduleTable(){
                                     return (
                                       <span key={(b.activityId||'none')}
                                         className={`px-1 py-0.5 rounded text-[9px] border ${highlight ? 'bg-amber-500 text-white border-amber-600' : 'bg-white dark:bg-gray-950 border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300'}`}
-                                        title={`${nm} • ${b.minutes}m (${pct}%)`}
-                                      >{nm} {b.minutes}m ({pct}%)</span>
+                                        title={`${nm} • ${(unit==='min'? fmtMinutes(b.minutes) : fmtHoursMinutes(b.minutes))} (${pct}%)`}
+                                      >{nm} {unit==='min'? fmtMinutes(b.minutes) : fmtHoursMinutes(b.minutes)} ({pct}%)</span>
                                     );
                                   })}
                                   {(() => {
@@ -1145,8 +1152,8 @@ export default function WeeklyScheduleTable(){
                                     if(remaining > 0){
                                       const pct = Math.round((remaining / segDur) * 100);
                                       return (
-                                        <span key="__free__" className="px-1 py-0.5 rounded text-[9px] border bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300" title={`Free • ${remaining}m (${pct}%)`}>
-                                          Free {remaining}m ({pct}%)
+                                        <span key="__free__" className="px-1 py-0.5 rounded text-[9px] border bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300" title={`Free • ${(unit==='min'? fmtMinutes(remaining) : fmtHoursMinutes(remaining))} (${pct}%)`}>
+                                          Free {unit==='min'? fmtMinutes(remaining) : fmtHoursMinutes(remaining)} ({pct}%)
                                         </span>
                                       );
                                     }
@@ -1168,8 +1175,8 @@ export default function WeeklyScheduleTable(){
                                       <span
                                         key={a.activityId}
                                         className={`px-1 py-0.5 rounded text-[9px] border ${idx===0 ? 'bg-amber-500 text-white border-amber-600' : 'bg-white dark:bg-gray-950 border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300'}`}
-                                        title={`${a.name} • ${a.minutes}m (${a.percent}%)`}
-                                      >{a.name} {a.minutes}m</span>
+                                        title={`${a.name} • ${(unit==='min'? fmtMinutes(a.minutes) : fmtHoursMinutes(a.minutes))} (${a.percent}%)`}
+                                      >{a.name} {unit==='min'? fmtMinutes(a.minutes) : fmtHoursMinutes(a.minutes)}</span>
                                     ));
                                   })()}
                                   {freeData.activities.length > 3 && (
@@ -1184,12 +1191,12 @@ export default function WeeklyScheduleTable(){
                           {!act.seg && freeData && (
                             <span className="absolute top-0 right-0 m-0.5 flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/90 text-[9px] font-semibold text-black shadow select-none" title="Time logged in free interval">
                               <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: freeData.activities[0]?.color || '#92400e' }} />
-                              LOG {freeData.totalMinutes}m
+                              LOG {unit==='min'? fmtMinutes(freeData.totalMinutes) : fmtHoursMinutes(freeData.totalMinutes)}
                             </span>
                           )}
                           {act.seg && act.seg.activityId && (
                             <span className={`block text-[9px] mt-0.5 text-gray-500 ${usageUpdating ? 'opacity-60' : ''}`}>
-                              {!hasLoadedUsage ? '…' : (usageUpdating ? 'updating…' : `${segmentLoggedMinutes[act.seg.id] ? segmentLoggedMinutes[act.seg.id] : 0}m / ${(act.seg.endMinute - act.seg.startMinute)}m`)}
+                              {!hasLoadedUsage ? '…' : (usageUpdating ? 'updating…' : `${unit==='min' ? fmtMinutes(segmentLoggedMinutes[act.seg.id] ? segmentLoggedMinutes[act.seg.id] : 0) : fmtHoursMinutes(segmentLoggedMinutes[act.seg.id] ? segmentLoggedMinutes[act.seg.id] : 0)} / ${unit==='min' ? fmtMinutes((act.seg.endMinute - act.seg.startMinute)) : fmtHoursMinutes((act.seg.endMinute - act.seg.startMinute))}`)}
                             </span>
                           )}
                           {act.seg && multi && (

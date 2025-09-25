@@ -65,3 +65,13 @@ export function combineDateAndTimeUTC(dateISO: string, timeHHMM: string): string
   const dt = new Date(Date.UTC(y,m-1,d,hh,mm,0,0));
   return dt.toISOString();
 }
+
+// Formatting helpers used across the app for displaying durations
+export function fmtMinutes(m: number){ return `${m}m`; }
+export function fmtHoursMinutes(m: number){
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  if (h > 0 && mm > 0) return `${h}h ${mm}m`;
+  if (h > 0) return `${h}h`;
+  return `${mm}m`;
+}
