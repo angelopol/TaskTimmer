@@ -3,11 +3,14 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useToast } from '../toast/ToastProvider';
 import { Button, IconButton } from '../ui/Button';
 import { IconAdd, IconEdit, IconTrash, IconSave, IconClose } from '../ui/icons';
+import { useUnit } from '../UnitProvider';
+import { fmtMinutes, fmtHoursMinutes } from '../../lib/time';
 
 interface Activity { id: string; name: string; color: string | null; weeklyTargetMinutes: number; createdAt: string; }
 
 export default function ActivitiesClient() {
   const { addToast } = useToast();
+  const { unit, setUnit } = useUnit();
   const [items, setItems] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -86,6 +89,10 @@ export default function ActivitiesClient() {
     <div className="space-y-6">
       <header className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="tt-heading-page">Activities</h1>
+        <div className="flex items-center gap-1" aria-label="Units switch">
+          <Button size="sm" variant={unit==='min' ? 'primary' : 'ghost'} onClick={()=>setUnit('min')}>Min</Button>
+          <Button size="sm" variant={unit==='hr' ? 'primary' : 'ghost'} onClick={()=>setUnit('hr')}>Hours</Button>
+        </div>
       </header>
 
       <section className="tt-panel tt-panel-padding space-y-4">
@@ -102,7 +109,14 @@ export default function ActivitiesClient() {
           <div className="flex flex-col gap-1">
             <label className="uppercase tracking-wide text-gray-500 dark:text-gray-400 text-[11px]">Weekly Target (m)</label>
             <input type="number" min={0} value={form.weeklyTargetMinutes} onChange={e=>setForm(f=>({...f,weeklyTargetMinutes:Number(e.target.value)}))} className="w-28 border rounded p-1 text-xs dark:bg-gray-950 dark:border-gray-700" />
-            <p className="text-[10px] text-gray-500 dark:text-gray-400">Used for progress metrics & weekly goal tracking.</p>
+            <div className="text-[10px] text-gray-500 dark:text-gray-400 flex items-center gap-2">
+              <span>Used for progress metrics & weekly goal tracking.</span>
+              {unit==='hr' && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                  ≈ {fmtHoursMinutes(form.weeklyTargetMinutes)}
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex md:justify-end">
             <Button type="submit" loading={creating} leftIcon={<IconAdd size={14} />}>{creating ? 'Saving...' : 'Add Activity'}</Button>
@@ -141,7 +155,7 @@ export default function ActivitiesClient() {
                   ) : (
                     <span className="flex items-center gap-2 font-medium"><span className="w-3 h-3 rounded-full inline-block" style={{background:it.color||'#999'}} />{it.name}</span>
                   )}
-                  <span className="text-[10px] text-gray-500">{it.weeklyTargetMinutes}m</span>
+                  <span className="text-[10px] text-gray-500">{unit==='min' ? fmtMinutes(it.weeklyTargetMinutes) : fmtHoursMinutes(it.weeklyTargetMinutes)}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   {editing ? (
@@ -208,7 +222,7 @@ export default function ActivitiesClient() {
                       {editing ? (
                         <input type="number" min={0} value={editData.weeklyTargetMinutes} onChange={e=>setEditData(d=>({...d,weeklyTargetMinutes:Number(e.target.value)}))} className="w-24 border rounded px-2 py-1 text-xs dark:bg-gray-950 dark:border-gray-700" />
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-[10px] font-medium">{it.weeklyTargetMinutes}m</span>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-[10px] font-medium">{unit==='min' ? fmtMinutes(it.weeklyTargetMinutes) : fmtHoursMinutes(it.weeklyTargetMinutes)}</span>
                       )}
                     </td>
                     <td className="px-3 py-2 align-middle text-right">
