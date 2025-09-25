@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Button } from './ui/Button';
 import { IconCalendar } from './ui/icons';
 import { useApiClient } from './useApiClient';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 interface ActivityStat {
   id: string;
@@ -33,13 +34,51 @@ export function DashboardWeekly() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const { apiFetch } = useApiClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  function toDateStr(d: Date) {
+    return d.toISOString().substring(0,10);
+  }
+  function startOfWeek(date: Date) { // Monday
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const day = d.getUTCDay();
+    const diff = (day === 0 ? -6 : 1 - day);
+    d.setUTCDate(d.getUTCDate()+diff);
+    d.setUTCHours(0,0,0,0);
+    return d;
+  }
+  const todayWeekStart = toDateStr(startOfWeek(new Date()));
+  const [weekStart, setWeekStart] = useState<string>(() => {
+    const param = searchParams?.get('weekStart');
+    if (param && !isNaN(new Date(param).getTime())) return param;
+    return todayWeekStart;
+  });
+
+  function goToWeek(newWeekStart: string) {
+    setWeekStart(newWeekStart);
+    // Keep URL in sync without adding history entries
+    const sp = new URLSearchParams(Array.from(searchParams?.entries?.() || []));
+    sp.set('weekStart', newWeekStart);
+    router.replace(`?${sp.toString()}`);
+  }
+  function addDays(dateStr: string, days: number) {
+    const d = new Date(dateStr);
+    d.setUTCDate(d.getUTCDate() + days);
+    return toDateStr(d);
+  }
+  const prevWeek = () => goToWeek(addDays(weekStart, -7));
+  const nextWeek = () => goToWeek(addDays(weekStart, 7));
+  const goToday = () => goToWeek(todayWeekStart);
+  const nextIsFuture = addDays(weekStart, 7) > todayWeekStart; // simple string compare ok for YYYY-MM-DD
 
   useEffect(() => {
     let aborted = false;
     (async () => {
       try {
         setLoading(true);
-        const resp = await apiFetch<DashboardResponse>('/api/dashboard');
+        const url = weekStart ? `/api/dashboard?weekStart=${encodeURIComponent(weekStart)}` : '/api/dashboard';
+        const resp = await apiFetch<DashboardResponse>(url);
         if (!aborted) {
           if (resp.ok && resp.data) {
             setData(resp.data);
@@ -56,7 +95,7 @@ export function DashboardWeekly() {
       }
     })();
     return () => { aborted = true; };
-  }, []);
+  }, [weekStart, apiFetch]);
 
   if (loading) return <p>Loading dashboard...</p>;
   if (error) return <p className="text-red-600">{error}</p>;
@@ -70,6 +109,11 @@ export function DashboardWeekly() {
           <p className="text-xs tt-text-muted">Week {data.weekStart} to {data.weekEndExclusive}</p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
+          <div className="flex items-center gap-1">
+            <Button size="sm" variant="ghost" onClick={prevWeek} aria-label="Previous week">◀ Prev</Button>
+            <Button size="sm" variant="ghost" onClick={goToday} aria-label="Current week">Today</Button>
+            <Button size="sm" variant="ghost" onClick={nextWeek} aria-label="Next week" disabled={nextIsFuture}>Next ▶</Button>
+          </div>
           <Link href="/schedule" aria-label="Go to weekly schedule" className="group">
             <Button asChild variant="primary" size="sm" leftIcon={<IconCalendar size={14} />}>Go to schedule</Button>
           </Link>
