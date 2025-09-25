@@ -192,7 +192,7 @@ export default function ActivitiesClient() {
               <tr className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 uppercase text-[10px] tracking-wide">
                 <th className="text-left px-3 py-2 font-semibold">Activity</th>
                 <th className="text-left px-3 py-2 font-semibold">Color</th>
-                <th className="text-left px-3 py-2 font-semibold">Weekly Target</th>
+                <th className="text-left px-3 py-2 font-semibold">Weekly Target {unit==='min' ? '(min)' : '(hours)'}</th>
                 <th className="text-right px-3 py-2 font-semibold">Actions</th>
               </tr>
             </thead>

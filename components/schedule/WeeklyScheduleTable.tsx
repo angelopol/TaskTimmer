@@ -66,6 +66,32 @@ export default function WeeklyScheduleTable(){
   // Removed debug functionality (was ENABLE_DEBUG, debugAllowed, showDebug, debugInfo)
   const [includeEmptySegmentsAsFree, setIncludeEmptySegmentsAsFree] = useState(false);
 
+  // Compute readable text color (black/white) over a given hex background color
+  function pickTextColor(bg?: string){
+    try {
+      if(!bg) return '#000';
+      let hex = bg.trim();
+      if(hex.startsWith('rgb')){
+        // naive rgb(a) parsing
+        const m = hex.match(/rgba?\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+        if(m){
+          const r = Number(m[1]), g = Number(m[2]), b = Number(m[3]);
+          const yiq = (r*299 + g*587 + b*114) / 1000;
+          return yiq >= 140 ? '#000' : '#fff';
+        }
+        return '#000';
+      }
+      if(hex[0] === '#') hex = hex.slice(1);
+      if(hex.length === 3){ hex = hex.split('').map(c=>c+c).join(''); }
+      if(hex.length !== 6) return '#000';
+      const r = parseInt(hex.slice(0,2), 16);
+      const g = parseInt(hex.slice(2,4), 16);
+      const b = parseInt(hex.slice(4,6), 16);
+      const yiq = (r*299 + g*587 + b*114) / 1000;
+      return yiq >= 140 ? '#000' : '#fff';
+    } catch { return '#000'; }
+  }
+
   // Restaurar preferencia toggle empty segments from localStorage
   useEffect(()=>{
     try {
@@ -1137,9 +1163,13 @@ export default function WeeklyScheduleTable(){
                                     const pctBase = (act.seg!.endMinute - act.seg!.startMinute) || 1;
                                     const pct = Math.round((b.minutes / pctBase) * 100);
                                     const highlight = dom && dom.activityId === b.activityId;
+                                    const chipBg = a?.color || '#6b7280';
+                                    const chipFg = pickTextColor(chipBg);
                                     return (
-                                      <span key={(b.activityId||'none')}
-                                        className={`px-1 py-0.5 rounded text-[9px] border ${highlight ? 'bg-amber-500 text-white border-amber-600' : 'bg-white dark:bg-gray-950 border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300'}`}
+                                      <span
+                                        key={(b.activityId||'none')}
+                                        className={`px-1 py-0.5 rounded text-[9px] border ${highlight ? 'ring-1 ring-amber-400' : ''}`}
+                                        style={{ backgroundColor: chipBg as string, color: chipFg as string, borderColor: chipFg+'20' }}
                                         title={`${nm} • ${(unit==='min'? fmtMinutes(b.minutes) : fmtHoursMinutes(b.minutes))} (${pct}%)`}
                                       >{nm} {unit==='min'? fmtMinutes(b.minutes) : fmtHoursMinutes(b.minutes)} ({pct}%)</span>
                                     );
@@ -1174,7 +1204,8 @@ export default function WeeklyScheduleTable(){
                                     return list.map((a,idx) => (
                                       <span
                                         key={a.activityId}
-                                        className={`px-1 py-0.5 rounded text-[9px] border ${idx===0 ? 'bg-amber-500 text-white border-amber-600' : 'bg-white dark:bg-gray-950 border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300'}`}
+                                        className={`px-1 py-0.5 rounded text-[9px] border ${idx===0 ? 'ring-1 ring-amber-400' : ''}`}
+                                        style={{ backgroundColor: (a.color || '#6b7280') as string, color: pickTextColor(a.color || '#6b7280') as string, borderColor: pickTextColor(a.color || '#6b7280')+'20' }}
                                         title={`${a.name} • ${(unit==='min'? fmtMinutes(a.minutes) : fmtHoursMinutes(a.minutes))} (${a.percent}%)`}
                                       >{a.name} {unit==='min'? fmtMinutes(a.minutes) : fmtHoursMinutes(a.minutes)}</span>
                                     ));
@@ -1189,10 +1220,20 @@ export default function WeeklyScheduleTable(){
                             )
                           )}
                           {!act.seg && freeData && (
-                            <span className="absolute top-0 right-0 m-0.5 flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/90 text-[9px] font-semibold text-black shadow select-none" title="Time logged in free interval">
-                              <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: freeData.activities[0]?.color || '#92400e' }} />
-                              LOG {unit==='min'? fmtMinutes(freeData.totalMinutes) : fmtHoursMinutes(freeData.totalMinutes)}
-                            </span>
+                            (()=>{
+                              const domColor = freeData.activities[0]?.color || '#92400e';
+                              const textColor = pickTextColor(domColor);
+                              return (
+                                <span
+                                  className="absolute top-0 right-0 m-0.5 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold shadow select-none"
+                                  style={{ backgroundColor: domColor as string, color: textColor as string, border: `1px solid ${textColor}20` }}
+                                  title="Time logged in free interval"
+                                >
+                                  <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: textColor as string, opacity: 0.6 }} />
+                                  LOG {unit==='min'? fmtMinutes(freeData.totalMinutes) : fmtHoursMinutes(freeData.totalMinutes)}
+                                </span>
+                              );
+                            })()
                           )}
                           {act.seg && act.seg.activityId && (
                             <span className={`block text-[9px] mt-0.5 text-gray-500 ${usageUpdating ? 'opacity-60' : ''}`}>
