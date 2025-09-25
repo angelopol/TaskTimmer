@@ -23,13 +23,14 @@ const updateSchema = z.object({
   segmentId: z.string().cuid().nullable().optional(),
   date: z.string().refine(v=>!isNaN(Date.parse(v)), 'Invalid date').optional(),
   startedAt: z.string().refine(v=>!isNaN(Date.parse(v)), 'Invalid startedAt').optional(),
-  endedAt: z.string().refine(v=>!isNaN(Date.parse(v)), 'Invalid endedAt').optional(),
+  endedAt: z.union([z.string().refine(v=>!isNaN(Date.parse(v)), 'Invalid endedAt'), z.null()]).optional(),
   minutes: z.number().int().positive().optional(),
   partial: z.boolean().optional(),
   source: z.enum(sourceEnum).optional(),
   comment: z.string().max(300).optional().nullable()
 }).refine(d => {
   if(d.startedAt && d.endedAt){
+    if(d.endedAt === null) return true; // allow making it ongoing via PATCH
     return new Date(d.endedAt).getTime() > new Date(d.startedAt).getTime();
   }
   return true;
@@ -77,12 +78,12 @@ export async function POST(req: Request) {
   if (mins <= 0) return NextResponse.json({ error: 'minutes must be > 0' }, { status: 422 });
 
   // Overlap validation: any existing log that starts before new end and ends after new start
-  const overlapping = await prisma.timeLog.findFirst({
+  const overlapping = await (prisma.timeLog as any).findFirst({
     where: {
       userId,
       AND: [
         { startedAt: { lt: ended } },
-        { endedAt: { gt: started } }
+        { OR: [ { endedAt: { gt: started } }, { endedAt: null } ] }
       ]
     }
   });
@@ -203,7 +204,7 @@ export async function PATCH(req: Request){
     if(!segment) return NextResponse.json({ error: 'Segment not found' }, { status: 404 });
   }
   const startedAt = data.startedAt ? new Date(data.startedAt) : existing.startedAt;
-  const endedAt = data.endedAt ? new Date(data.endedAt) : existing.endedAt;
+  const endedAt: Date | null = (data.endedAt === undefined) ? existing.endedAt : (data.endedAt === null ? null : new Date(data.endedAt));
   // If updating date, parse local midnight
   let newDate = existing.date;
   if(data.date){
@@ -215,9 +216,11 @@ export async function PATCH(req: Request){
       newDate = new Date(data.date);
     }
   }
-  if(endedAt.getTime() <= startedAt.getTime()) return NextResponse.json({ error: 'endedAt must be after startedAt' }, { status: 422 });
-  const minutes = data.minutes ?? Math.round((endedAt.getTime()-startedAt.getTime())/60000);
-  if(minutes <= 0) return NextResponse.json({ error: 'minutes must be > 0' }, { status: 422 });
+  if(endedAt){
+    if(endedAt.getTime() <= startedAt.getTime()) return NextResponse.json({ error: 'endedAt must be after startedAt' }, { status: 422 });
+  }
+  const minutes = data.minutes ?? (endedAt ? Math.round((endedAt.getTime()-startedAt.getTime())/60000) : existing.minutes);
+  if(endedAt && minutes <= 0) return NextResponse.json({ error: 'minutes must be > 0' }, { status: 422 });
   if(segment){
     const segDur = segment.endMinute - segment.startMinute;
     if(minutes > segDur && (data.source ?? existing.source) === 'PLANNED'){
@@ -230,15 +233,17 @@ export async function PATCH(req: Request){
       userId,
       id: { not: id },
       AND: [
-        { startedAt: { lt: endedAt } },
-        { endedAt: { gt: startedAt } }
+        // existing starts before new end (use now if ongoing)
+        { startedAt: { lt: endedAt ? endedAt : new Date() } },
+        // existing ends after new start OR is ongoing
+        { OR: [ { endedAt: { gt: startedAt } }, { endedAt: null as any } ] }
       ]
     }
   });
   if (overlapping) {
     return NextResponse.json({ error: 'Time range overlaps an existing log' }, { status: 409 });
   }
-  const updated = await prisma.timeLog.update({ where: { id }, data: {
+  const updated = await (prisma.timeLog as any).update({ where: { id }, data: {
     activityId: data.activityId === undefined ? existing.activityId : data.activityId,
     segmentId: data.segmentId === undefined ? existing.segmentId : data.segmentId,
     date: newDate,

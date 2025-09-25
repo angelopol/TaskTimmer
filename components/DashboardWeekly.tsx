@@ -7,6 +7,8 @@ import { useApiClient } from './useApiClient';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useUnit } from './UnitProvider';
 import { fmtMinutes, fmtHoursMinutes } from '../lib/time';
+import { StartActivityModal } from './activities/StartActivityModal';
+import { useToast } from './toast/ToastProvider';
 
 interface ActivityStat {
   id: string;
@@ -31,6 +33,8 @@ interface DashboardResponse {
   activities: ActivityStat[];
 }
 
+interface CurrentActivityResp { active: null | { id: string; startedAt: string; elapsedMinutes: number; activity: { id: string; name: string; color: string | null } | null }; }
+
 export function DashboardWeekly() {
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,6 +43,10 @@ export function DashboardWeekly() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { unit, setUnit } = useUnit();
+  const [current, setCurrent] = useState<CurrentActivityResp['active']>(null);
+  const [tick, setTick] = useState(0);
+  const [startOpen, setStartOpen] = useState(false);
+  const { addToast } = useToast();
 
   function toDateStr(d: Date) {
     return d.toISOString().substring(0,10);
@@ -114,6 +122,36 @@ export function DashboardWeekly() {
     return () => { aborted = true; };
   }, [weekStart, apiFetch]);
 
+  // Poll current activity once and then tick elapsed every 30s
+  useEffect(()=>{
+    let mounted = true;
+    (async()=>{
+      const resp = await apiFetch<CurrentActivityResp>('/api/logs/current');
+      if(mounted && resp.ok && resp.data){ setCurrent(resp.data.active); }
+    })();
+    const id = setInterval(()=> setTick(t=>t+1), 30000);
+    return ()=>{ mounted=false; clearInterval(id); };
+  }, [apiFetch]);
+
+  const [startActivityId, setStartActivityId] = useState<string>('');
+  async function startActivity(activityId?: string){
+    const resp = await apiFetch<{ log: any }>('/api/logs/start', { method:'POST', json: { activityId: activityId || null } });
+    if(resp.ok && resp.data){
+      const log = (resp.data as any).log;
+      setCurrent({ id: log.id, startedAt: log.startedAt, elapsedMinutes: 0, activity: log.activity || null });
+      setStartOpen(false);
+      addToast({ type:'success', message:'Started activity' });
+    } else if(resp.status === 409){
+      addToast({ type:'info', message: 'There is already an active activity' });
+    } else if(!resp.ok){
+      addToast({ type:'error', message: resp.error || 'Failed to start' });
+    }
+  }
+  async function terminateCurrent(){
+    const resp = await apiFetch<{ log: any }>('/api/logs/terminate', { method:'POST' });
+    if(resp.ok){ setCurrent(null); addToast({ type:'success', message:'Stopped activity' }); } else if(resp.status===409){ addToast({ type:'info', message:'No active activity' }); } else { addToast({ type:'error', message: resp.error || 'Failed to stop' }); }
+  }
+
   if (loading) return <p>Loading dashboard...</p>;
   if (error) return <p className="text-red-600">{error}</p>;
   if (!data) return null;
@@ -140,6 +178,49 @@ export function DashboardWeekly() {
           </Link>
         </div>
       </header>
+      {/* Current Activity card */}
+      <div className="tt-panel tt-panel-padding flex items-center justify-between gap-3">
+        {current ? (
+          <>
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: current.activity?.color || '#999' }} />
+              <div className="leading-tight">
+                <div className="font-medium">Current: {current.activity?.name || 'Unassigned'}</div>
+                {(() => {
+                  const started = new Date(current.startedAt);
+                  const mins = Math.max(0, Math.round((Date.now() - started.getTime())/60000));
+                  return (
+                    <div className="text-xs tt-text-muted">Started at {started.toLocaleTimeString()} • Elapsed ~ {unit==='min' ? `${mins} min` : fmtHoursMinutes(mins)}</div>
+                  );
+                })()}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="danger" onClick={terminateCurrent}>Terminate</Button>
+            </div>
+          </>
+        ) : (
+          <div className="w-full flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm tt-text-muted">No activity in progress</span>
+              {data?.activities?.length ? (
+                <select className="tt-input text-sm" value={startActivityId} onChange={e=>setStartActivityId(e.target.value)}>
+                  <option value="">Select activity…</option>
+                  {data.activities.map(a=> (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              ) : null}
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={()=>startActivity(startActivityId || undefined)} disabled={data?.activities?.length ? false : true}>Start</Button>
+              <Button size="sm" variant="ghost" onClick={()=>setStartOpen(true)}>Pick…</Button>
+              <Link href="/activities"><Button size="sm" variant="primary">Manage activities</Button></Link>
+            </div>
+          </div>
+        )}
+      </div>
+      <StartActivityModal open={startOpen} onClose={()=>setStartOpen(false)} onStart={startActivity} />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {data.activities.map(a => {
           const pct = a.percent ?? 0;

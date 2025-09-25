@@ -82,8 +82,8 @@ model TimeLog {
   segmentId        String?
   date             DateTime        // store the day (strip time in app logic)
   startedAt        DateTime
-  endedAt          DateTime
-  minutes          Int
+  endedAt          DateTime?       // null => ongoing (active) log
+  minutes          Int             // can be 0 while ongoing; finalized on termination
   partial          Boolean         @default(false)
   source           TimeLogSource   @default(PLANNED)
   comment          String?

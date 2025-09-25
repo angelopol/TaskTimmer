@@ -5,6 +5,7 @@ import { minutesToHHMM, hhmmToMinutes, WEEKDAY_NAMES_SHORT, isoDate, combineDate
 import { useWeek } from '../week/WeekContext';
 import { useToast } from '../toast/ToastProvider';
 import { useUnit } from '../UnitProvider';
+import { CurrentActivityBar } from '../CurrentActivityBar';
 
 interface Activity { id: string; name: string; color: string | null; }
 interface Segment { id: string; weekday: number; startMinute: number; endMinute: number; activityId: string | null; notes: string | null; activity?: Activity | null; }
@@ -325,6 +326,7 @@ export default function LogTimeForm(){
 
   return (
   <div className="space-y-6">
+    <CurrentActivityBar />
       {/* Active week banner */}
       <ActiveWeekBanner weekStart={weekStart} />
       <div className="flex items-center gap-3">

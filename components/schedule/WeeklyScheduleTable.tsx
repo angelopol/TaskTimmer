@@ -7,6 +7,7 @@ import { minutesToHHMM, WEEKDAY_NAMES_LONG, combineDateAndTime, fmtMinutes, fmtH
 import { useWeek } from '../week/WeekContext';
 import { useToast } from '../toast/ToastProvider';
 import { useUnit } from '../UnitProvider';
+import { CurrentActivityBar } from '../CurrentActivityBar';
 
 interface Activity { id: string; name: string; color: string | null; }
 interface Segment { id: string; weekday: number; startMinute: number; endMinute: number; activityId: string | null; activity?: Activity | null; }
@@ -279,9 +280,9 @@ export default function WeeklyScheduleTable(){
       if(!segments.length){
         const globalBoundaries = new Set<number>([0,1440]);
         for(const log of logs){
-          if(!log.startedAt || !log.endedAt) continue;
+          if(!log.startedAt) continue;
           const startDateTime = new Date(log.startedAt);
-          const endDateTime = new Date(log.endedAt);
+          const endDateTime = log.endedAt ? new Date(log.endedAt) : new Date();
           if(endDateTime <= startDateTime) continue;
           let cursor = new Date(startDateTime);
           while(cursor < endDateTime){
@@ -319,9 +320,9 @@ export default function WeeklyScheduleTable(){
       const unmatched: any[] = [];
       let cellUpdates = 0;
       for(const log of logs){
-        if(!log.startedAt || !log.endedAt) continue;
+        if(!log.startedAt) continue;
         const startDateTime = new Date(log.startedAt);
-        const endDateTime = new Date(log.endedAt);
+        const endDateTime = log.endedAt ? new Date(log.endedAt) : new Date();
         if(endDateTime <= startDateTime) continue;
         let cursor = new Date(startDateTime);
         let matchedThisLog = false;
@@ -1022,6 +1023,7 @@ export default function WeeklyScheduleTable(){
 
   return (
     <div className="space-y-4">
+      <CurrentActivityBar />
       <div className="flex items-center gap-3 flex-wrap">
         <h2 className="tt-heading-page text-lg">Weekly Schedule <span className="text-sm font-normal text-gray-500 dark:text-gray-400">{weekRangeLabel}</span></h2>
         <div className="flex items-center gap-1">
