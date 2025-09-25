@@ -76,6 +76,11 @@ async function run(){
   const updates: { id: string; startedAt: Date; endedAt: Date; date: Date; oldStarted: Date; oldEnded: Date; }[] = [];
 
   for(const log of logs){
+    // Skip ongoing logs (no endedAt)
+    if(!log.endedAt){
+      console.warn(`Skipping ongoing log ${log.id} (endedAt is null)`);
+      continue;
+    }
     const oldStarted = new Date(log.startedAt);
     const oldEnded = new Date(log.endedAt);
     // Sanity
