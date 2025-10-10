@@ -1,9 +1,30 @@
-import type { NextAuthOptions } from 'next-auth';
+import type { NextAuthOptions, Session, User } from 'next-auth';
+import type { JWT } from 'next-auth/jwt';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { verifyUser } from './auth';
 
 const SHORT_SESSION_HOURS = parseInt(process.env.SHORT_SESSION_HOURS || '6', 10); // default 6h
 const LONG_SESSION_DAYS = parseInt(process.env.LONG_SESSION_DAYS || '30', 10);    // default 30d
+
+type RememberCredentials = {
+  email?: string;
+  password?: string;
+  remember?: string;
+};
+
+type RememberUser = User & { remember?: boolean };
+
+type RememberToken = JWT & {
+  userId?: string;
+  remember?: boolean;
+  expTs?: number;
+};
+
+type RememberSession = Session & {
+  userId?: string | null;
+  remember?: boolean;
+  expiresAt?: number | null;
+};
 
 export const authOptions: NextAuthOptions = {
   session: { strategy: 'jwt', maxAge: 60 * 60 * 24 * 30 }, // base fallback
@@ -17,63 +38,77 @@ export const authOptions: NextAuthOptions = {
         remember: { label: 'Remember', type: 'text' }
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials.password) return null;
-        const user = await verifyUser(credentials.email, credentials.password);
+        const { email, password, remember } = (credentials ?? {}) as RememberCredentials;
+        if (!email || !password) return null;
+        const user = await verifyUser(email, password);
         if (!user) return null;
         // Attach remember to the user payload so jwt callback can read it
-        const remember = (credentials as any).remember === '1' || (credentials as any).remember === 'true';
-        return { id: user.id, email: user.email, name: user.name, remember } as any;
+        const rememberFlag = remember === '1' || remember === 'true';
+        const rememberUser: RememberUser = {
+          id: user.id,
+          email: user.email,
+          name: user.name ?? user.email,
+          remember: rememberFlag
+        };
+        return rememberUser;
       }
     })
   ],
   pages: {},
   callbacks: {
-    async jwt({ token, user, account, trigger, session }) {
+    async jwt({ token, user, trigger, session }) {
+      const rememberToken = token as RememberToken;
       // On initial sign in attach userId and compute expiration based on remember flag.
       if (user) {
-        token.userId = (user as any).id;
+        const rememberUser = user as RememberUser;
+        rememberToken.userId = rememberUser.id;
         // Set remember based on user.remember if present, else keep existing or default false
-        if (typeof (user as any).remember !== 'undefined') {
-          (token as any).remember = !!(user as any).remember;
-        } else if (typeof (token as any).remember === 'undefined') {
-          (token as any).remember = false;
+        if (typeof rememberUser.remember !== 'undefined') {
+          rememberToken.remember = !!rememberUser.remember;
+        } else if (typeof rememberToken.remember === 'undefined') {
+          rememberToken.remember = false;
         }
         const now = Date.now();
-        const expMs = (token as any).remember
+        const expMs = rememberToken.remember
           ? now + LONG_SESSION_DAYS * 24 * 60 * 60 * 1000
           : now + SHORT_SESSION_HOURS * 60 * 60 * 1000;
-        (token as any).expTs = expMs; // custom epoch ms
+        rememberToken.expTs = expMs; // custom epoch ms
       }
 
       // If trigger === 'update' (session update), allow toggling remember on the fly
       if (trigger === 'update' && session) {
-        if (typeof (session as any).remember !== 'undefined') {
-          (token as any).remember = !!(session as any).remember;
+        const rememberSession = session as RememberSession;
+        if (typeof rememberSession.remember !== 'undefined') {
+          rememberToken.remember = !!rememberSession.remember;
           const now = Date.now();
-            const expMs = (token as any).remember
-              ? now + LONG_SESSION_DAYS * 24 * 60 * 60 * 1000
-              : now + SHORT_SESSION_HOURS * 60 * 60 * 1000;
-          (token as any).expTs = expMs;
+          const expMs = rememberToken.remember
+            ? now + LONG_SESSION_DAYS * 24 * 60 * 60 * 1000
+            : now + SHORT_SESSION_HOURS * 60 * 60 * 1000;
+          rememberToken.expTs = expMs;
         }
       }
 
       // Enforce expiration manually (NextAuth still has its internal maxAge but we enforce our custom window)
-      if ((token as any).expTs && Date.now() > (token as any).expTs) {
+      if (rememberToken.expTs && Date.now() > rememberToken.expTs) {
         // Invalidate token by removing userId
-        delete (token as any).userId;
+        rememberToken.userId = undefined;
       }
-      return token;
+      return rememberToken;
     },
     async session({ session, token }) {
-      if (token.userId) {
-        (session as any).userId = token.userId;
-        (session as any).remember = (token as any).remember || false;
-        (session as any).expiresAt = (token as any).expTs || null;
+      const rememberSession = session as RememberSession;
+      const rememberToken = token as RememberToken;
+      if (rememberToken.userId) {
+        rememberSession.userId = rememberToken.userId;
+        rememberSession.remember = rememberToken.remember ?? false;
+        rememberSession.expiresAt = rememberToken.expTs ?? null;
       } else {
         // Session considered invalid
-        (session as any).userId = null;
+        rememberSession.userId = null;
+        rememberSession.remember = false;
+        rememberSession.expiresAt = null;
       }
-      return session;
+      return rememberSession;
     }
   }
 };
