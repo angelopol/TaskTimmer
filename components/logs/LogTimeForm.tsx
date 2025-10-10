@@ -259,8 +259,11 @@ export default function LogTimeForm(){
   }
 
   async function startEdit(log: any){
+    if(!log.endedAt){
+      addToast({ type:'info', message:'Finish the activity before editing the log.' });
+      return;
+    }
     setEditingLogId(log.id);
-    // populate form fields for convenience
     const dateISO = log.date.substring(0,10);
     setDate(dateISO);
     setStart(log.startedAt.substring(11,16));
@@ -477,7 +480,7 @@ export default function LogTimeForm(){
               const mins = Math.round((new Date(l.endedAt).getTime()-new Date(l.startedAt).getTime())/60000);
               return (
                 <div key={l.id} className={`flex flex-wrap gap-2 items-center border border-gray-200 dark:border-gray-700 rounded px-2 py-1 bg-white dark:bg-gray-900 ${editingLogId===l.id ? 'ring-1 ring-blue-400' : ''}`}>
-                  <span className="font-mono">{l.startedAt.substring(11,16)}-{l.endedAt.substring(11,16)}</span>
+                  <span className="font-mono">{l.startedAt.substring(11,16)}-{l.endedAt ? l.endedAt.substring(11,16) : '…'}</span>
                   <span className="tt-badge" data-size="sm">{unit==='min' ? fmtMinutes(mins) : fmtHoursMinutes(mins)}</span>
                   {act && (
                     <span className="tt-badge" data-size="sm">
