@@ -321,6 +321,8 @@ export default function WeeklyScheduleTable(){
       const unmatched: any[] = [];
       let cellUpdates = 0;
       for(const log of logs){
+        // Only consider logs that are NOT explicitly linked to a segment; these are the ones we want to surface as overlays
+        if (log.segmentId) continue;
         if(!log.startedAt) continue;
         const startDateTime = new Date(log.startedAt);
         const endDateTime = log.endedAt ? new Date(log.endedAt) : new Date();
@@ -341,11 +343,9 @@ export default function WeeklyScheduleTable(){
           // Tomamos ceil exacto y NO restamos 1 minuto completo; solo asegura que segundos parciales cuenten.
           const sliceEndM = Math.ceil(rawEndM - 1e-9);
           if(sliceEndM > sliceStartM){
-            // Map this slice into free cells
+            // Map this slice into ALL cells (free or planned) for overlay purposes
             for(const interval of mappingRows){
               const cellStart = interval.start; const cellEnd = interval.end;
-              const seg = byDay[weekday].find(s=> s.startMinute <= cellStart && s.endMinute >= cellEnd);
-              if(seg) continue;
               const overlapStart = Math.max(sliceStartM, cellStart);
               const overlapEnd = Math.min(sliceEndM, cellEnd);
               if(overlapEnd <= overlapStart) continue;
@@ -375,10 +375,8 @@ export default function WeeklyScheduleTable(){
           cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1, 0,0,0,0);
         }
         if(!matchedThisLog){
-          // Solo consideramos realmente unmatched aquellos sin segmentId (logs sueltos) que no intersectaron celdas libres.
-          if(!log.segmentId){
-            unmatched.push({ id: log.id, startedAt: log.startedAt, endedAt: log.endedAt, activity: log.activity?.name, segmentId: log.segmentId, slices: sliceDebug });
-          }
+          // Track a few samples for diagnostics only
+          unmatched.push({ id: log.id, startedAt: log.startedAt, endedAt: log.endedAt, activity: log.activity?.name, segmentId: log.segmentId, slices: sliceDebug });
         }
       }
       // finalize percent & dominant
@@ -1123,8 +1121,7 @@ export default function WeeklyScheduleTable(){
                       const dominantDiffers = !!(dom && dom.activityId && plannedActivityId && dom.activityId !== plannedActivityId);
                       const bg = act.seg ? 'bg-blue-50/40 dark:bg-blue-900/10 hover:bg-blue-100 dark:hover:bg-blue-900/40 cursor-pointer' : 'hover:bg-blue-50 dark:hover:bg-blue-900/30 cursor-pointer';
                       const freeKey = `${day}:${r.start}-${r.end}`;
-                      const freeData = !act.seg ? freeLogsMap[freeKey] : undefined; // ensure key defined before usage
-                      const isFree = !act.seg;
+                      const overlayData = freeLogsMap[freeKey]; // may exist for free or planned cells
                       const handleCellClick = () => {
                         if(act.seg){
                           openModal(act.seg);
@@ -1133,7 +1130,7 @@ export default function WeeklyScheduleTable(){
                         }
                       };
                       return (
-                        <td key={day} className={`group relative px-2 py-1 whitespace-nowrap ${bg} ${freeData ? 'border border-amber-400/40 ring-1 ring-amber-400/30 rounded' : ''}`}
+                        <td key={day} className={`group relative px-2 py-1 whitespace-nowrap ${bg} ${(!act.seg && overlayData) ? 'border border-amber-400/40 ring-1 ring-amber-400/30 rounded' : ''}`}
                           onClick={handleCellClick}
                         >
                           {act.seg ? (
@@ -1200,12 +1197,12 @@ export default function WeeklyScheduleTable(){
                               <span className="font-medium" style={ actColor ? { color: actColor } : undefined }>{act.name}</span>
                             )
                           ) : (
-                            freeData ? (
+                            overlayData ? (
                               <div className="flex flex-col gap-0.5">
                                 <span className="font-medium text-amber-600 dark:text-amber-400">Free</span>
                                 <div className="flex flex-wrap gap-0.5">
                                   {(() => {
-                                    const list = freeData.activities.slice(0,3);
+                                    const list = overlayData.activities.slice(0,3);
                                     return list.map((a,idx) => (
                                       <span
                                         key={a.activityId}
@@ -1215,8 +1212,8 @@ export default function WeeklyScheduleTable(){
                                       >{a.name} {unit==='min'? fmtMinutes(a.minutes) : fmtHoursMinutes(a.minutes)}</span>
                                     ));
                                   })()}
-                                  {freeData.activities.length > 3 && (
-                                    <span className="px-1 py-0.5 rounded text-[9px] border bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300" title={freeData.activities.slice(3).map(a=>`${a.name} ${a.minutes}m`).join(', ')}>+{freeData.activities.length - 3} more</span>
+                                  {overlayData.activities.length > 3 && (
+                                    <span className="px-1 py-0.5 rounded text-[9px] border bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300" title={overlayData.activities.slice(3).map((a)=>`${a.name} ${a.minutes}m`).join(', ')}>+{overlayData.activities.length - 3} more</span>
                                   )}
                                 </div>
                               </div>
@@ -1224,9 +1221,9 @@ export default function WeeklyScheduleTable(){
                               <span className="font-medium" style={ actColor ? { color: actColor } : undefined }>{act.name}</span>
                             )
                           )}
-                          {!act.seg && freeData && (
+                          {overlayData && (
                             (()=>{
-                              const domColor = freeData.activities[0]?.color || '#92400e';
+                              const domColor = overlayData.activities[0]?.color || '#92400e';
                               const textColor = pickTextColor(domColor);
                               return (
                                 <span
@@ -1235,7 +1232,7 @@ export default function WeeklyScheduleTable(){
                                   title="Time logged in free interval"
                                 >
                                   <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: textColor as string, opacity: 0.6 }} />
-                                  LOG {unit==='min'? fmtMinutes(freeData.totalMinutes) : fmtHoursMinutes(freeData.totalMinutes)}
+                                  LOG {unit==='min'? fmtMinutes(overlayData.totalMinutes) : fmtHoursMinutes(overlayData.totalMinutes)}
                                 </span>
                               );
                             })()
