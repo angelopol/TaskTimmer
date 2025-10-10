@@ -486,9 +486,13 @@ export default function LogTimeForm(){
               const et = l.endedAt ? new Date(l.endedAt) : null;
               const mins = l.minutes ?? (et ? Math.max(0, Math.round((et.getTime()-st.getTime())/60000)) : 0);
               const hhmm = (d: Date)=> `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+              // Local date label (Weekday DD/MM)
+              const wd0 = st.getDay(); // 0=Sun..6=Sat
+              const wdIdx = wd0 === 0 ? 6 : wd0 - 1; // map to 0=Mon..6=Sun index for WEEKDAY_NAMES_SHORT
+              const dateLabel = `${WEEKDAY_NAMES_SHORT[wdIdx]} ${pad2(st.getDate())}/${pad2(st.getMonth()+1)}`;
               return (
                 <div key={l.id} className={`flex flex-wrap gap-2 items-center border border-gray-200 dark:border-gray-700 rounded px-2 py-1 bg-white dark:bg-gray-900 ${editingLogId===l.id ? 'ring-1 ring-blue-400' : ''}`}>
-                  <span className="font-mono">{hhmm(st)}-{et ? hhmm(et) : '…'}</span>
+                  <span className="font-mono">{dateLabel} {hhmm(st)}-{et ? hhmm(et) : '…'}</span>
                   <span className="tt-badge" data-size="sm">{unit==='min' ? fmtMinutes(mins) : fmtHoursMinutes(mins)}</span>
                   {act && (
                     <span className="tt-badge" data-size="sm">
