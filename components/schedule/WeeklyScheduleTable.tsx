@@ -492,31 +492,48 @@ export default function WeeklyScheduleTable(){
   }
 
   // Fetch logs that fall within the selected segment or free interval boundaries for its weekday.
+  // For real segments, include BOTH logs linked to the segment and free (unsegmentId) logs that overlap the interval.
   async function fetchModalLogs(seg: Segment | TempFreeSlot, page: number, replace = false){
     try {
       setModalLogsLoading(true);
       const date = weekDateForWeekday(seg.weekday);
-      // We'll fetch all logs for that date within ±1 day boundary via API filter by date, then filter client-side to the interval.
-      const params = new URLSearchParams();
-      params.set('weekStart', weekStart); // ensures same week scoping
-      params.set('date', date); // limit to the calendar day
-      params.set('limit', '100'); // grab enough to filter
-      params.set('order', 'asc');
-      if(!('temp' in seg)){
-        // For segment choose segmentId filter to reduce server volume
-        params.set('segmentId', seg.id);
+      // Build base params
+      const base = new URLSearchParams();
+      base.set('weekStart', weekStart);
+      base.set('date', date);
+      base.set('limit', '250');
+      base.set('order', 'asc');
+
+      let logs: any[] = [];
+      if('temp' in seg){
+        // Free interval: only fetch unlinked logs for that date
+        const p = new URLSearchParams(base);
+        p.set('noSegment', '1');
+        const res = await fetch(`/api/logs?${p.toString()}`, { cache: 'no-store' });
+        const data = await res.json();
+        if(!res.ok) throw new Error(data.error || 'Failed to fetch logs');
+        logs = Array.isArray(data.logs) ? data.logs : [];
+      } else {
+        // Segment interval: fetch both linked-to-segment and free logs, then merge
+        const pSeg = new URLSearchParams(base); pSeg.set('segmentId', seg.id);
+        const pFree = new URLSearchParams(base); pFree.set('noSegment', '1');
+        const [resSeg, resFree] = await Promise.all([
+          fetch(`/api/logs?${pSeg.toString()}`, { cache: 'no-store' }),
+          fetch(`/api/logs?${pFree.toString()}`, { cache: 'no-store' })
+        ]);
+        const [dataSeg, dataFree] = await Promise.all([resSeg.json(), resFree.json()]);
+        if(!resSeg.ok) throw new Error(dataSeg.error || 'Failed to fetch segment logs');
+        if(!resFree.ok) throw new Error(dataFree.error || 'Failed to fetch free logs');
+        const arrSeg = Array.isArray(dataSeg.logs) ? dataSeg.logs : [];
+        const arrFree = Array.isArray(dataFree.logs) ? dataFree.logs : [];
+        // Merge unique by id
+        const byId: Record<string, any> = {};
+        for(const l of [...arrSeg, ...arrFree]){ if(l && l.id) byId[l.id] = l; }
+        logs = Object.values(byId);
       }
-      const res = await fetch(`/api/logs?${params.toString()}`, { cache: 'no-store' });
-      const data = await res.json();
-      if(!res.ok) throw new Error(data.error || 'Failed to fetch logs');
-      let logs: any[] = data.logs || [];
       // If free interval (temp) include ONLY unsegmented logs overlapping the interval
-      // If segment interval, we already filtered by segmentId (logs variable already appropriate)
       const intervalStart = seg.startMinute;
       const intervalEnd = seg.endMinute;
-      if('temp' in seg){
-        logs = logs.filter(l => !l.segmentId); // free logs only
-      }
       // Additional client-side overlap filter (safety) by comparing startedAt/endedAt minute offsets
       const filtered = logs.filter(l => {
         const st = new Date(l.startedAt);
