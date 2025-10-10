@@ -89,9 +89,11 @@ export default function ActivitiesClient() {
     <div className="space-y-6">
       <header className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="tt-heading-page">Activities</h1>
-        <div className="flex items-center gap-1" aria-label="Units switch">
-          <Button size="sm" variant={unit==='min' ? 'primary' : 'ghost'} onClick={()=>setUnit('min')}>Min</Button>
-          <Button size="sm" variant={unit==='hr' ? 'primary' : 'ghost'} onClick={()=>setUnit('hr')}>Hours</Button>
+        <div className="w-full sm:w-auto">
+          <div className="flex items-center gap-1 overflow-x-auto sm:overflow-visible [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Units switch">
+            <Button className="shrink-0" size="sm" variant={unit==='min' ? 'primary' : 'ghost'} onClick={()=>setUnit('min')}>Min</Button>
+            <Button className="shrink-0" size="sm" variant={unit==='hr' ? 'primary' : 'ghost'} onClick={()=>setUnit('hr')}>Hours</Button>
+          </div>
         </div>
       </header>
 

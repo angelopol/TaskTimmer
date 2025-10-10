@@ -165,19 +165,22 @@ export function DashboardWeekly() {
           <h2 className="tt-heading-page mb-1">Weekly Dashboard</h2>
           <p className="text-xs tt-text-muted">Week {data.weekStart} to {data.weekEndExclusive}</p>
         </div>
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <div className="flex items-center gap-1">
-            <Button size="sm" variant="ghost" onClick={prevWeek} aria-label="Previous week">◀ Prev</Button>
-            <Button size="sm" variant="ghost" onClick={goToday} aria-label="Current week">Today</Button>
-            <Button size="sm" variant="ghost" onClick={nextWeek} aria-label="Next week" disabled={nextIsFuture}>Next ▶</Button>
+        {/* Mobile-only horizontal scroller for action buttons */}
+        <div className="self-start sm:self-auto w-full sm:w-auto">
+          <div className="flex items-center gap-2 overflow-x-auto sm:overflow-visible [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex items-center gap-1 flex-nowrap">
+              <Button className="shrink-0" size="sm" variant="ghost" onClick={prevWeek} aria-label="Previous week">◀ Prev</Button>
+              <Button className="shrink-0" size="sm" variant="ghost" onClick={goToday} aria-label="Current week">Today</Button>
+              <Button className="shrink-0" size="sm" variant="ghost" onClick={nextWeek} aria-label="Next week" disabled={nextIsFuture}>Next ▶</Button>
+            </div>
+            <div className="flex items-center gap-1 flex-nowrap" aria-label="Units switch">
+              <Button className="shrink-0" size="sm" variant={unit==='min' ? 'primary' : 'ghost'} onClick={()=>setUnitAndSync('min')}>Min</Button>
+              <Button className="shrink-0" size="sm" variant={unit==='hr' ? 'primary' : 'ghost'} onClick={()=>setUnitAndSync('hr')}>Hours</Button>
+            </div>
+            <Link href="/schedule" aria-label="Go to weekly schedule" className="group shrink-0">
+              <Button asChild variant="primary" size="sm" leftIcon={<IconCalendar size={14} />}>Go to schedule</Button>
+            </Link>
           </div>
-          <div className="flex items-center gap-1" aria-label="Units switch">
-            <Button size="sm" variant={unit==='min' ? 'primary' : 'ghost'} onClick={()=>setUnitAndSync('min')}>Min</Button>
-            <Button size="sm" variant={unit==='hr' ? 'primary' : 'ghost'} onClick={()=>setUnitAndSync('hr')}>Hours</Button>
-          </div>
-          <Link href="/schedule" aria-label="Go to weekly schedule" className="group">
-            <Button asChild variant="primary" size="sm" leftIcon={<IconCalendar size={14} />}>Go to schedule</Button>
-          </Link>
         </div>
       </header>
       {/* Current Activity card */}
