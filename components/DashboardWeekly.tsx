@@ -133,7 +133,6 @@ export function DashboardWeekly() {
     return ()=>{ mounted=false; clearInterval(id); };
   }, [apiFetch]);
 
-  const [startActivityId, setStartActivityId] = useState<string>('');
   async function startActivity(activityId?: string){
     const resp = await apiFetch<{ log: any }>('/api/logs/start', { method:'POST', json: { activityId: activityId || null } });
     if(resp.ok && resp.data){
@@ -201,26 +200,15 @@ export function DashboardWeekly() {
           </>
         ) : (
           <div className="w-full flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm tt-text-muted">No activity in progress</span>
-              {data?.activities?.length ? (
-                <select className="tt-input text-sm" value={startActivityId} onChange={e=>setStartActivityId(e.target.value)}>
-                  <option value="">Select activity…</option>
-                  {data.activities.map(a=> (
-                    <option key={a.id} value={a.id}>{a.name}</option>
-                  ))}
-                </select>
-              ) : null}
-            </div>
+            <span className="text-sm tt-text-muted">No activity in progress</span>
             <div className="flex gap-2">
-              <Button size="sm" onClick={()=>startActivity(startActivityId || undefined)} disabled={data?.activities?.length ? false : true}>Start</Button>
               <Button size="sm" variant="ghost" onClick={()=>setStartOpen(true)}>Pick…</Button>
               <Link href="/activities"><Button size="sm" variant="primary">Manage activities</Button></Link>
             </div>
           </div>
         )}
       </div>
-      <StartActivityModal open={startOpen} onClose={()=>setStartOpen(false)} onStart={startActivity} />
+  <StartActivityModal open={startOpen} onClose={()=>setStartOpen(false)} onStart={startActivity} />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {data.activities.map(a => {
           const pct = a.percent ?? 0;
@@ -245,8 +233,8 @@ export function DashboardWeekly() {
                 </span>
               </div>
               <div className="text-[11px] text-gray-600 mb-2 flex flex-wrap gap-3">
-                <span>Meta restante: <strong>{remainingLabel}</strong></span>
-                <span>Horario pendiente: <strong>{plannedRemainingLabel}</strong></span>
+                <span>Remaining target: <strong>{remainingLabel}</strong></span>
+                <span>Remaining horary: <strong>{plannedRemainingLabel}</strong></span>
               </div>
               <div className="space-y-2 mt-1 flex-1">
                 {/* Target progress bar */}
