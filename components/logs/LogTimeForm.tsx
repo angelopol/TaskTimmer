@@ -36,7 +36,10 @@ export default function LogTimeForm(){
   const { weekStart, setWeekStart, gotoPrevWeek, gotoNextWeek, gotoThisWeek } = useWeek();
   const { unit, setUnit } = useUnit();
   const { addToast } = useToast();
-  const todayISO = isoDate(new Date());
+  // Local YYYY-MM-DD for user's timezone (avoid UTC shifts)
+  const pad2 = (n:number)=> n.toString().padStart(2,'0');
+  const localYYYYMMDD = (d: Date)=> `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+  const todayISO = localYYYYMMDD(new Date());
   const [date, setDate] = useState(todayISO);
   const [start, setStart] = useState('09:00');
   const [end, setEnd] = useState('10:00');
@@ -264,10 +267,12 @@ export default function LogTimeForm(){
       return;
     }
     setEditingLogId(log.id);
-    const dateISO = log.date.substring(0,10);
-    setDate(dateISO);
-    setStart(log.startedAt.substring(11,16));
-    setEnd(log.endedAt.substring(11,16));
+    const st = new Date(log.startedAt);
+    const et = new Date(log.endedAt);
+    setDate(localYYYYMMDD(st));
+    const hhmm = (d: Date)=> `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    setStart(hhmm(st));
+    setEnd(hhmm(et));
     setActivityId(log.activityId || '');
     setSegmentId(log.segmentId || '');
     setSource(log.source);
@@ -336,7 +341,7 @@ export default function LogTimeForm(){
         <h1 className="tt-heading-page mr-auto">Log Time</h1>
         <div className="flex items-center gap-1 text-[10px]">
           <button type="button" onClick={()=>{ gotoPrevWeek(); }} className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">◀</button>
-          <button type="button" onClick={()=>{ gotoThisWeek(); setDate(isoDate(new Date())); }} className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">Hoy</button>
+          <button type="button" onClick={()=>{ gotoThisWeek(); setDate(localYYYYMMDD(new Date())); }} className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">Hoy</button>
           <button type="button" onClick={()=>{ gotoNextWeek(); }} className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800">▶</button>
         </div>
         <div className="flex items-center gap-1 ml-2" aria-label="Units switch">
@@ -477,10 +482,13 @@ export default function LogTimeForm(){
           <div className="space-y-1 text-xs max-h-[520px] overflow-auto pr-1">
             {recentLogs.map(l => {
               const act = l.activity as Activity | undefined;
-              const mins = Math.round((new Date(l.endedAt).getTime()-new Date(l.startedAt).getTime())/60000);
+              const st = new Date(l.startedAt);
+              const et = l.endedAt ? new Date(l.endedAt) : null;
+              const mins = l.minutes ?? (et ? Math.max(0, Math.round((et.getTime()-st.getTime())/60000)) : 0);
+              const hhmm = (d: Date)=> `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
               return (
                 <div key={l.id} className={`flex flex-wrap gap-2 items-center border border-gray-200 dark:border-gray-700 rounded px-2 py-1 bg-white dark:bg-gray-900 ${editingLogId===l.id ? 'ring-1 ring-blue-400' : ''}`}>
-                  <span className="font-mono">{l.startedAt.substring(11,16)}-{l.endedAt ? l.endedAt.substring(11,16) : '…'}</span>
+                  <span className="font-mono">{hhmm(st)}-{et ? hhmm(et) : '…'}</span>
                   <span className="tt-badge" data-size="sm">{unit==='min' ? fmtMinutes(mins) : fmtHoursMinutes(mins)}</span>
                   {act && (
                     <span className="tt-badge" data-size="sm">
