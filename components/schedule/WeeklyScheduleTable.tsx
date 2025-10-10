@@ -277,6 +277,7 @@ export default function WeeklyScheduleTable(){
   const hadAnyLogs = logs.length > 0;
 
       // Si no hay segmentos definidos, construimos filas sintéticas basadas en límites de logs
+      let nextSyntheticRows: { start:number; end:number; }[] | null = null;
       if(!segments.length){
         const globalBoundaries = new Set<number>([0,1440]);
         for(const log of logs){
@@ -301,15 +302,15 @@ export default function WeeklyScheduleTable(){
         const sortedB = Array.from(globalBoundaries).sort((a,b)=>a-b);
         const synthetic: {start:number; end:number;}[] = [];
         for(let i=0;i<sortedB.length-1;i++){ const a=sortedB[i], b=sortedB[i+1]; if(b>a) synthetic.push({start:a,end:b}); }
-        setSyntheticRows(synthetic);
+        nextSyntheticRows = synthetic;
       } else if(syntheticRows.length){
         // Limpiar si había filas sintéticas previas
         setSyntheticRows([]);
       }
       // Precomputar celdas libres para depuración
+      const mappingRows = rows.length ? rows : (nextSyntheticRows ?? syntheticRows);
       const freeCellKeys: string[] = [];
-      const gridRows = rows.length ? rows : syntheticRows;
-      for(const r of gridRows){
+      for(const r of mappingRows){
         for(let day=1; day<=7; day++){
           const seg = byDay[day].find(s=> s.startMinute <= r.start && s.endMinute >= r.end);
           if(!seg){
@@ -341,8 +342,7 @@ export default function WeeklyScheduleTable(){
           const sliceEndM = Math.ceil(rawEndM - 1e-9);
           if(sliceEndM > sliceStartM){
             // Map this slice into free cells
-            const intervalsForMapping = rows.length ? rows : syntheticRows;
-            for(const interval of intervalsForMapping){
+            for(const interval of mappingRows){
               const cellStart = interval.start; const cellEnd = interval.end;
               const seg = byDay[weekday].find(s=> s.startMinute <= cellStart && s.endMinute >= cellEnd);
               if(seg) continue;
@@ -389,6 +389,9 @@ export default function WeeklyScheduleTable(){
           entry.activities.forEach(a=>{ a.percent = Math.round((a.minutes / entry.totalMinutes)*100); });
         }
       });
+      if(!segments.length){
+        setSyntheticRows(nextSyntheticRows || []);
+      }
       setFreeLogsMap(map);
       const diag = {
         weekStart: from,
