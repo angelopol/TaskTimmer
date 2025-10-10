@@ -134,7 +134,10 @@ export function DashboardWeekly() {
   }, [apiFetch]);
 
   async function startActivity(activityId?: string){
-    const resp = await apiFetch<{ log: any }>('/api/logs/start', { method:'POST', json: { activityId: activityId || null } });
+    const now = new Date();
+    const pad = (n:number)=> n.toString().padStart(2,'0');
+    const clientDate = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+    const resp = await apiFetch<{ log: any }>('/api/logs/start', { method:'POST', json: { activityId: activityId || null, clientNow: now.toISOString(), clientDate } });
     if(resp.ok && resp.data){
       const log = (resp.data as any).log;
       setCurrent({ id: log.id, startedAt: log.startedAt, elapsedMinutes: 0, activity: log.activity || null });

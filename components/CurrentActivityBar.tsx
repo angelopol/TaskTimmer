@@ -17,7 +17,11 @@ export function CurrentActivityBar(){
   useEffect(()=>{ (async()=>{ const r = await apiFetch<{ active: Current|null }>('/api/logs/current'); if(r.ok) setCurrent(r.data?.active || null); })(); }, [apiFetch]);
 
   async function start(activityId?: string){
-    const r = await apiFetch<{ log:any }>('/api/logs/start', { method:'POST', json: { activityId: activityId || null } });
+    // Send client-local instant and date to preserve local intent on the server
+    const now = new Date();
+    const pad = (n:number)=> n.toString().padStart(2,'0');
+    const clientDate = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+    const r = await apiFetch<{ log:any }>('/api/logs/start', { method:'POST', json: { activityId: activityId || null, clientNow: now.toISOString(), clientDate } });
     if(r.ok && r.data){ const log = (r.data as any).log; setCurrent({ id: log.id, startedAt: log.startedAt, elapsedMinutes: 0, activity: log.activity || null }); setOpen(false); addToast({ type:'success', message:'Started activity' }); }
     else if(r.status===409){ addToast({ type:'info', message:'Already active' }); }
     else { addToast({ type:'error', message: r.error || 'Failed to start' }); }
