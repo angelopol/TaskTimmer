@@ -1192,6 +1192,22 @@ export default function WeeklyScheduleTable(){
                                     return null;
                                   })()}
                                 </div>
+                                {/* Overlay chips for unlinked logs intersecting this planned cell */}
+                                {overlayData && (
+                                  <div className="flex flex-wrap gap-0.5 mt-0.5">
+                                    {overlayData.activities.slice(0,3).map((a,idx) => (
+                                      <span
+                                        key={`overlay-${a.activityId}`}
+                                        className={`px-1 py-0.5 rounded text-[9px] border ${idx===0 ? 'ring-1 ring-amber-400' : ''}`}
+                                        style={{ backgroundColor: (a.color || '#6b7280') as string, color: pickTextColor(a.color || '#6b7280') as string, borderColor: pickTextColor(a.color || '#6b7280')+'20' }}
+                                        title={`${a.name} • ${(unit==='min'? fmtMinutes(a.minutes) : fmtHoursMinutes(a.minutes))} (${a.percent}%)`}
+                                      >{a.name} {unit==='min'? fmtMinutes(a.minutes) : fmtHoursMinutes(a.minutes)}</span>
+                                    ))}
+                                    {overlayData.activities.length > 3 && (
+                                      <span className="px-1 py-0.5 rounded text-[9px] border bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300" title={overlayData.activities.slice(3).map((a)=>`${a.name} ${a.minutes}m`).join(', ')}>+{overlayData.activities.length - 3} more</span>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             ) : (
                               <span className="font-medium" style={ actColor ? { color: actColor } : undefined }>{act.name}</span>
@@ -1225,11 +1241,12 @@ export default function WeeklyScheduleTable(){
                             (()=>{
                               const domColor = overlayData.activities[0]?.color || '#92400e';
                               const textColor = pickTextColor(domColor);
+                              const titleStr = act.seg ? 'Time logged in this interval' : 'Time logged in free interval';
                               return (
                                 <span
                                   className="absolute top-0 right-0 m-0.5 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold shadow select-none"
                                   style={{ backgroundColor: domColor as string, color: textColor as string, border: `1px solid ${textColor}20` }}
-                                  title="Time logged in free interval"
+                                  title={titleStr}
                                 >
                                   <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: textColor as string, opacity: 0.6 }} />
                                   LOG {unit==='min'? fmtMinutes(overlayData.totalMinutes) : fmtHoursMinutes(overlayData.totalMinutes)}
