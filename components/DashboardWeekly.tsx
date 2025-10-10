@@ -226,6 +226,9 @@ export function DashboardWeekly() {
           const pct = a.percent ?? 0;
           const coverage = a.plannedCoveragePercent ?? 0;
           const planned = a.plannedMinutesWeek;
+          const remainingLabel = fmt(a.remaining);
+          const plannedRemainingLabel = fmt(a.plannedRemaining);
+          const targetLabel = fmt(a.target);
           const sources = Object.entries(a.loggedBySource).sort((x,y)=>y[1]-x[1]);
           return (
             <div key={a.id} className="tt-panel tt-panel-padding flex flex-col">
@@ -235,11 +238,15 @@ export function DashboardWeekly() {
                   {a.name}
                 </h3>
                 <span className="text-xs tt-text-muted">
-                  {fmt(a.done)} / {fmt(a.target)}
+                  {fmt(a.done)} / {targetLabel}
                   {a.over>0 && (
                     <strong className="text-red-600 ml-1">+{fmt(a.over)}</strong>
                   )}
                 </span>
+              </div>
+              <div className="text-[11px] text-gray-600 mb-2 flex flex-wrap gap-3">
+                <span>Meta restante: <strong>{remainingLabel}</strong></span>
+                <span>Horario pendiente: <strong>{plannedRemainingLabel}</strong></span>
               </div>
               <div className="space-y-2 mt-1 flex-1">
                 {/* Target progress bar */}
@@ -248,7 +255,7 @@ export function DashboardWeekly() {
                     <div className="h-full bg-blue-600" style={{ width: `${Math.min(100,pct)}%` }} />
                   </div>
                   <div className="flex justify-between text-[10px] text-gray-600 mt-1">
-                    <span>Target {fmt(a.target)}</span>
+                    <span>Target {targetLabel}</span>
                     <span>{pct.toFixed(1)}%</span>
                   </div>
                 </div>
