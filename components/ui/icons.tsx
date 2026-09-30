@@ -157,7 +157,17 @@ export const IconList = createIcon(<>
   <path d="M3 18h.01" />
 </>, 'IconList');
 
-export const IconCheck =createIcon(<polyline points="20 6 9 17 4 12" />, 'IconCheck');
+export const IconBell = createIcon(<>
+  <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+  <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+</>, 'IconBell');
+
+export const IconCopy = createIcon(<>
+  <rect x="9" y="9" width="13" height="13" rx="2" />
+  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+</>, 'IconCopy');
+
+export const IconCheck = createIcon(<polyline points="20 6 9 17 4 12" />, 'IconCheck');
 
 export const IconSearch = createIcon(<>
   <circle cx="11" cy="11" r="7" />

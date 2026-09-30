@@ -16,6 +16,10 @@ export async function middleware(req: NextRequest) {
   if (pathname.startsWith('/api/auth/')) {
     return NextResponse.next();
   }
+  // Machine-to-machine ingest (iOS Shortcut) authenticates with its own bearer token in the route.
+  if (pathname.startsWith('/api/ingest/')) {
+    return NextResponse.next();
+  }
   try {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
     if (!token || !(token as any).userId) {

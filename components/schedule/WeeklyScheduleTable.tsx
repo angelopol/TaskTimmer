@@ -5,12 +5,14 @@ import { ErrorState, LoadingState, EmptyState } from '../ui/Feedback';
 import { Button } from '../ui/Button';
 import { Menu } from '../ui/Menu';
 import { DayPicker } from '../ui/DayPicker';
-import { IconAdd, IconCalendar, IconEdit, IconList, IconSegment, IconTrash } from '../ui/icons';
+import { IconAdd, IconBell, IconCalendar, IconEdit, IconList, IconSegment, IconTrash } from '../ui/icons';
 import { minutesToHHMM, WEEKDAY_NAMES_LONG, WEEKDAY_NAMES_SHORT, combineDateAndTime, fmtMinutes, fmtHoursMinutes } from '../../lib/time';
 import { useWeek } from '../week/WeekContext';
 import { useToast } from '../toast/ToastProvider';
 import { useUnit } from '../UnitProvider';
 import { WeekNav } from '../week/WeekNav';
+import { useWeekReminders, type DayReminder } from '../reminders/useWeekReminders';
+import { ReminderList } from '../reminders/ReminderList';
 
 interface Activity { id: string; name: string; color: string | null; }
 interface Segment { id: string; weekday: number; startMinute: number; endMinute: number; activityId: string | null; activity?: Activity | null; }
@@ -668,6 +670,12 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
   }
 
   const fmt = (n:number) => unit === 'min' ? fmtMinutes(n) : fmtHoursMinutes(n);
+  const reminders = useWeekReminders(weekStart);
+  /** Read-only Apple Reminders of `weekday` due in [start, end). All-day ones only count for a whole-day range. */
+  function remindersIn(weekday:number, start:number, end:number): DayReminder[] {
+    const list = reminders.byDay[weekDateForWeekday(weekday)] || [];
+    return list.filter(r => r.minute === null ? start === 0 && end === 1440 : r.minute >= start && r.minute < end);
+  }
   const activityById = useMemo(() => Object.fromEntries(activities.map(a => [a.id, a])) as Record<string, Activity>, [activities]);
   const sourceLabel: Record<Source, string> = { PLANNED:'Scheduled', ADHOC:'Unplanned', MAKEUP:'Catch-up' };
   const weekDates = useMemo(() => [1,2,3,4,5,6,7].map(weekDateForWeekday), [weekStart]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -746,11 +754,17 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
         {renderChips(overlayChips)}
       </>;
     }
+    const cellReminders = remindersIn(day, cell.start, cell.end).filter(r => r.minute !== null);
+    const pending = cellReminders.filter(r => !r.completed).length;
     return <td key={day} rowSpan={cell.span} className={day === selectedDay ? '' : 'max-sm:hidden'}>
-      <button type="button" className="tt-cell" data-kind={kind} style={style}
+      <button type="button" className={'tt-cell ' + (cellReminders.length ? 'pr-9' : '')} data-kind={kind} style={style}
         onClick={() => seg ? openModal(seg) : openModal({ temp:true, weekday:day, startMinute:cell.start, endMinute:cell.end })}
-        aria-label={`${WEEKDAY_NAMES_LONG[day-1]}, ${label}, ${name}. Record time`}>
+        aria-label={`${WEEKDAY_NAMES_LONG[day-1]}, ${label}, ${name}${cellReminders.length ? `, ${cellReminders.length} reminder${cellReminders.length === 1 ? '' : 's'}` : ''}. Record time`}>
         {body}
+        {cellReminders.length > 0 && <span aria-hidden="true" title={cellReminders.map(r => `${minutesToHHMM(r.minute!)} ${r.title}${r.completed ? ' ✓' : ''}`).join('\n')}
+          className={'absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-full px-1.5 py-px text-[10px] font-bold tabular-nums ' + (pending ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200')}>
+          <IconBell size={10} strokeWidth={2.5} />{cellReminders.length}
+        </span>}
       </button>
     </td>;
   }
@@ -813,6 +827,13 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
       title={`${WEEKDAY_NAMES_SHORT[selectedSegment.weekday-1]} · ${minutesToHHMM(selectedSegment.startMinute)}–${minutesToHHMM(selectedSegment.endMinute)}`}
       description={'temp' in selectedSegment ? 'Free time' : (selectedSegment.activity?.name || 'Open block')}>
       <div className="space-y-5">
+        {(() => {
+          const inBlock = remindersIn(selectedSegment.weekday, selectedSegment.startMinute, selectedSegment.endMinute);
+          return inBlock.length > 0 && <section aria-label="Apple Reminders" className="space-y-2">
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold"><IconBell size={15} />Reminders <span className="tt-text-muted text-xs font-normal">· read only</span></h3>
+            <ReminderList reminders={inBlock} />
+          </section>;
+        })()}
         <section aria-label="Logged time" className="space-y-2">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold">Logged</h3>
@@ -922,7 +943,7 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
       {!loading && !error && view === 'agenda' && <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {WEEKDAY_NAMES_LONG.map((day, index) => {
           const blocks = [...byDay[index+1]].sort((a,b)=>a.startMinute-b.startMinute);
-          if(!segments.length && index+1 !== selectedDay) return null;
+          if(!segments.length && !reminders.hasAny && index+1 !== selectedDay) return null;
           return <section key={day} className={'space-y-1.5 ' + (index+1 === selectedDay ? '' : 'max-sm:hidden')}>
             <div className="flex items-baseline justify-between gap-2 px-1">
               <h3 className="text-sm font-semibold">{day} <span className="tt-text-muted font-normal">{new Date(weekDates[index]+'T12:00:00').toLocaleDateString(undefined, { day:'numeric', month:'short' })}</span></h3>
@@ -945,6 +966,7 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
               })}
               {!blocks.length && <li className="tt-text-muted px-4 py-3 text-sm">No blocks planned.</li>}
             </ul>
+            <ReminderList reminders={reminders.byDay[weekDates[index]] || []} />
           </section>;
         })}
       </div>}
@@ -957,6 +979,9 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
                 {WEEKDAY_NAMES_SHORT.map((d,i)=>(
                   <th key={d} data-today={weekDates[i] === todayISO || undefined} className={i+1 === selectedDay ? '' : 'max-sm:hidden'}>
                     {d} <span className="font-normal">{Number(weekDates[i].slice(8))}</span>
+                    {(reminders.byDay[weekDates[i]]?.length || 0) > 0 && <span className="ml-1.5 inline-flex items-center gap-0.5 text-[11px] text-amber-700 dark:text-amber-300" title={reminders.byDay[weekDates[i]].map(r => (r.minute === null ? 'All day' : minutesToHHMM(r.minute)) + ' ' + r.title).join('\n')}>
+                      <IconBell size={11} />{reminders.byDay[weekDates[i]].length}
+                    </span>}
                   </th>
                 ))}
               </tr>

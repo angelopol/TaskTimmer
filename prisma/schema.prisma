@@ -22,6 +22,8 @@ model User {
   activities    Activity[]
   segments      ScheduleSegment[]
   logs          TimeLog[]
+  integrationTokens IntegrationToken[]
+  externalReminders ExternalReminder[]
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 }
@@ -81,4 +83,35 @@ model TimeLog {
   updatedAt        DateTime        @updatedAt
   @@index([userId, date])
   @@index([activityId])
+}
+
+// Personal token used by the iOS Shortcut to push Apple Reminders. Only the SHA-256 hash is stored.
+model IntegrationToken {
+  id         String    @id @default(cuid())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  kind       String    @default("apple-reminders")
+  tokenHash  String    @unique
+  prefix     String    // first characters, shown in the UI to identify the token
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  @@unique([userId, kind])
+}
+
+// Read-only snapshot of Apple Reminders. Each sync replaces the user's whole set.
+model ExternalReminder {
+  id        String    @id @default(cuid())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  source    String    @default("apple")
+  title     String
+  notes     String?
+  list      String?
+  dueAt     DateTime?
+  allDay    Boolean   @default(false)
+  completed Boolean   @default(false)
+  flagged   Boolean   @default(false)
+  priority  Int       @default(0)
+  syncedAt  DateTime  @default(now())
+  @@index([userId, dueAt])
 }
