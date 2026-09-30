@@ -7,7 +7,7 @@ import { redirect } from 'next/navigation';
 
 export default async function RegisterPage() {
   const session = await getServerSession(authOptions as any);
-  if (session) redirect('/');
+  if (session && (session as any).userId) redirect('/');
   return (
     <AuthLayout title="Create your account" subtitle="Start organizing your activities and schedule">
       <AuthCard>

@@ -9,7 +9,7 @@ export default async function Home() {
   const session = await getServerSession(authOptions as any);
   if (!session || !(session as any).userId) {
     return (
-      <AuthLayout title="TaskTimmer" subtitle="Sign in to access your dashboard">
+      <AuthLayout title="Welcome back" subtitle="Sign in to make a little space for what matters.">
         <AuthCard>
           <AuthForm mode="login" />
         </AuthCard>

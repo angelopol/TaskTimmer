@@ -1,11 +1,11 @@
 /* Basic service worker for TaskTimmer */
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const PRECACHE = `precache-${CACHE_VERSION}`;
 const RUNTIME = `runtime-${CACHE_VERSION}`;
 
 // Resources to precache (shell)
 const PRECACHE_URLS = [
-  '/',
+  '/offline.html',
   '/manifest.webmanifest',
   '/icon-clock-pixel.svg'
 ];
@@ -34,11 +34,7 @@ self.addEventListener('fetch', event => {
     // Network-first for navigation requests
     if (request.mode === 'navigate') {
       event.respondWith(
-        fetch(request).then(resp => {
-          const copy = resp.clone();
-          caches.open(RUNTIME).then(cache => cache.put(request, copy));
-          return resp;
-        }).catch(() => caches.match(request).then(r => r || caches.match('/')))
+        fetch(request).catch(() => caches.match('/offline.html'))
       );
       return;
     }

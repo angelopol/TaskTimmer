@@ -1,155 +1,39 @@
-# Deployment Guide (Vercel)
+# Deploy TaskTimmer with Neon PostgreSQL
 
-Comprehensive steps to deploy TaskTimmer to Vercel using a managed MySQL database (recommended) or SQLite (dev-only). Includes environment configuration, migrations, seeding, and PWA considerations.
+The application uses Prisma 6 and PostgreSQL. The checked-in migration creates its four tables and enum. The supplied MariaDB dump is `u619022423_tasktimmer.sql`; it is ignored by Git because it contains account data and password hashes.
 
----
-## 1. Prerequisites
-- Vercel account
-- Git repository (GitHub / GitLab / Bitbucket) containing the project
-- MySQL database (PlanetScale, Neon for MySQL beta, Railway, Aiven, Planetscale, or self-hosted). PlanetScale recommended (no native FKs by default; Prisma works with its compatibility mode).
-- Node.js 18+ locally for migration/seeding tasks
+## 1. Configure Neon
 
-## 2. Choose Database Provider
-Production: Use MySQL. SQLite is file-based and not suited for multi-instance concurrency or Vercel's ephemeral filesystem.
+Create or select a Neon database in the Vercel Marketplace. Copy both connection strings from Neon for the same database and branch:
 
-## 3. Environment Variables
-Copy `.env.example` and set values in Vercel Project Settings > Environment Variables.
+- `DATABASE_URL`: pooled connection string (`-pooler` hostname), for application queries.
+- `DIRECT_URL`: direct connection string, for Prisma migrations and the data import.
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| DB_PROVIDER | yes | `mysql` for production |
-| DATABASE_URL | yes | MySQL connection string (Prisma format) |
-| NEXTAUTH_SECRET | yes | 32+ char base64 secret (openssl rand -base64 32) |
-| NEXTAUTH_URL | yes | Public HTTPS URL (e.g. https://tasktimmer.vercel.app) |
-| SHORT_SESSION_HOURS | yes | Short session duration (int hours) |
-| LONG_SESSION_DAYS | yes | Remember-me session duration (int days) |
-| DEMO_SEED | no  | `true` only if you want automatic demo data (avoid in shared prod) |
-| LOG_LEVEL | no  | Future: logging verbosity |
+Both URLs should use `postgresql://` and `sslmode=require`. Set them in Vercel Production environment variables and in your local `.env` when importing. Also set `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `SHORT_SESSION_HOURS`, and `LONG_SESSION_DAYS` as in `.env.example`. Vercel Marketplace may provide differently named variables; map their values to these names.
 
-PlanetScale example connection string:
-```
-mysql://<username>:<password>@<host>/<database>?sslaccept=strict
-```
+## 2. Create the schema and load the dump
 
-## 4. Prisma Schema Provider
-Ensure `prisma/schema.prisma` datasource block uses `provider = "mysql"` (or `env("DB_PROVIDER")` if configured). Commit any change before deploying.
+Do this once on an **empty** target database. The import uses plain `INSERT` statements and rolls back if any row violates a constraint. Do not run the demo seed before the import.
 
-```
-datasource db {
-  provider = env("DB_PROVIDER")
-  url      = env("DATABASE_URL")
-}
-```
-
-## 5. Running Migrations
-Vercel build environment is read-only regarding running interactive migrations. Use one of:
-
-### Provided NPM Scripts
-Production-safe scripts now included in `package.json`:
-
-| Script | Purpose |
-|--------|---------|
-| `npm run migrate:deploy` | Applies already-generated migrations to the target DB |
-| `npm run migrate:prod` | Runs `prisma generate` then `prisma migrate deploy` (convenience) |
-| `npm run build:with-migrate` | Runs `migrate:deploy` then `next build` |
-
-Example (PowerShell) applying to a staging database (temporary inline env vars):
 ```powershell
-$env:DB_PROVIDER="mysql"; $env:DATABASE_URL="mysql://user:pass@host:3306/db"; $env:NEXTAUTH_SECRET="base64secret"; npm run migrate:prod
-```
-
-If your environment variables are already configured in the shell/session you can simply run:
-```powershell
+npm ci
 npm run migrate:deploy
+python scripts/mysql_dump_to_postgres.py u619022423_tasktimmer.sql tasktimmer.postgresql-data.sql
+psql $env:DIRECT_URL -X -v ON_ERROR_STOP=1 -f tasktimmer.postgresql-data.sql
 ```
 
-After the first deploy (migrations applied), subsequent deploys succeed automatically unless new migration files are added. Always generate migrations locally via `npx prisma migrate dev` before committing.
+If the database can only be reached from Vercel, run the migration and import in an environment that has access to that Neon database. The generated SQL file can also be loaded with a PostgreSQL SQL console that accepts scripts. Keep it private and do not commit or upload it to a public repository.
 
-#### Recommended Vercel Configuration
+The generated `tasktimmer.postgresql-data.sql` contains private data and is ignored by Git. The converter checks row counts, duplicate IDs, and foreign key references before writing it. It preserves the dump's timestamp values as PostgreSQL `timestamp(3)` values.
 
-Install Command (leave empty for default) or explicitly:
+Verify the imported counts:
+
+```powershell
+psql $env:DIRECT_URL -X -c 'SELECT (SELECT count(*) FROM "User") AS users, (SELECT count(*) FROM "Activity") AS activities, (SELECT count(*) FROM "ScheduleSegment") AS segments, (SELECT count(*) FROM "TimeLog") AS logs;'
 ```
-npm install
-```
-Build Command:
-```
-npm run build:with-migrate
-```
-Reasoning: `postinstall` already ran `prisma generate`. At build we only apply pending migrations and compile the app.
 
-⚠️ Avoid formatting Install Command like:
-```
-`npm install`, `npm run migrate:prod`
-```
-This is treated as a single invalid shell token and fails with exit code 127.
+For the supplied dump, expect 4 users, 8 activities, 18 segments, and 233 logs. Test login and a representative activity and log before directing production traffic to the new database.
 
-### Option A: prisma migrate deploy (recommended)
-1. Ensure all migrations exist locally via `npx prisma migrate dev` (this generates SQL in `prisma/migrations/`).
-2. Commit the migrations folder.
-3. During Vercel build, add a Post-Install / Build Command step or run manually once:
-   - Add a Vercel deploy hook script or run locally: `npx prisma migrate deploy` (provide env vars locally, pointing to production DB) to apply migrations before first request.
-4. (Optional) Create a script in `package.json`:
-```
-"scripts": {
-  "migrate:deploy": "prisma migrate deploy"
-}
-```
-Then run it locally with production env vars exported.
+## 3. Deploy
 
-### Option B: Manual SQL apply
-If your provider restricts DDL in certain workflows, generate SQL via `npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script` and apply through your DB console. Then future migration files follow normal `migrate dev` flow.
-
-## 6. Seeding Strategy
-If you need demo data in staging:
-- Set `DEMO_SEED=true` and implement a seed script (current project uses `npm run seed`).
-- Run seed locally against staging DB (preferred) rather than automatic on every deploy to avoid duplicate records.
-- For production, generally keep `DEMO_SEED=false`.
-
-## 7. Deployment Steps Summary
-1. Set env vars in Vercel (Production + Preview as needed).
-2. Switch datasource provider to MySQL if not already.
-3. Generate and commit migrations.
-4. (Optional) Seed staging database manually.
-5. Push to main branch; Vercel builds and deploys.
-6. Visit the site and log in / register.
-
-## 8. Updating the Service Worker
-Cache version lives in `public/sw.js` (e.g., `const CACHE_NAME = 'tasktimmer-v3';`). To force clients to refresh cached assets:
-1. Increment version suffix (v3 -> v4).
-2. Commit & deploy.
-3. Clients will activate new SW on next visit (a second refresh may be needed).
-
-No env vars are required for SW updates.
-
-## 9. Icon & PWA Assets
-If you change the base icon, run:
-```
-node scripts/generate-icons.js
-```
-Commit updated icons + manifest. Test installation (Chrome Lighthouse > PWA).
-
-## 10. Performance & Cold Starts
-- Use MySQL connection pooling (some providers auto-handle). For PlanetScale, avoid long transactions.
-- Heavy dynamic routes can leverage Next.js Route Segment Config (dynamic = 'force-static' / caching) for static portions later.
-
-## 11. Security Notes
-- Keep `NEXTAUTH_SECRET` private; rotate if leaked.
-- Enforce HTTPS (Vercel default).
-- Consider setting `COOKIE_PREFIX` or advanced session options in future.
-
-## 12. Troubleshooting
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| 500 on auth callback | Missing NEXTAUTH_URL or secret | Set both in env |
-| Prisma Error: P1001 | DB unreachable | Check host/firewall/SSL params |
-| Auth works locally but not prod | Wrong NEXTAUTH_URL | Set to public domain |
-| Old UI after deploy | SW cached assets | Bump cache version in `sw.js` |
-| Seed duplicates | Seeding on every deploy | Keep DEMO_SEED=false in prod |
-
-## 13. Future Enhancements
-- Add `prisma generate` + `migrate deploy` as explicit build step via Vercel Project Settings > Build Command.
-- Introduce metrics/log aggregation (e.g., OpenTelemetry) and structured logs.
-- Add monitoring uptime check + synthetic login test.
-
----
-Happy shipping! 🚀
+After setting Vercel environment variables, set the Vercel Build Command to `npm run build:with-migrate` if Vercel is the only environment that can reach Neon. This applies the migration before building. `postinstall` generates Prisma Client. Import the converted data once the schema exists. Future schema changes should be created with `prisma migrate dev` against a development PostgreSQL database and applied with `npm run migrate:deploy` before deployment. Do not use `db push --accept-data-loss` on imported data.

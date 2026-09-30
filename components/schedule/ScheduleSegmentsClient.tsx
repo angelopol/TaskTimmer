@@ -1,8 +1,8 @@
 "use client";
 import React, { useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { useTheme } from '../ThemeProvider';
-import { minutesToHHMM, hhmmToMinutes, WEEKDAY_NAMES_SHORT } from '../../lib/time';
+import { Dialog } from '../ui/Dialog';
+import { ErrorState, LoadingState } from '../ui/Feedback';
+import { minutesToHHMM, hhmmToMinutes, WEEKDAY_NAMES_LONG } from '../../lib/time';
 import { useToast } from '../toast/ToastProvider';
 import { Button, IconButton } from '../../components/ui/Button';
 import { IconAdd, IconEdit, IconTrash, IconClose, IconSave } from '../../components/ui/icons';
@@ -22,7 +22,7 @@ interface FormState {
   effectiveFromDate?: string; // YYYY-MM-DD when custom-week
 }
 
-const weekdayNames = [...WEEKDAY_NAMES_SHORT];
+const weekdayNames = [...WEEKDAY_NAMES_LONG];
 
 export default function ScheduleSegmentsClient(){
   const { addToast } = useToast();
@@ -37,11 +37,6 @@ export default function ScheduleSegmentsClient(){
   // Using global toast provider now
   // const [toasts, setToasts] = useState<{id:string; msg:string;}[]>([]);
   const [showFuture, setShowFuture] = useState(true);
-  const [portalEl, setPortalEl] = useState<HTMLElement | null>(null);
-  useEffect(()=>{ setPortalEl(document.body); },[]);
-  useEffect(()=>{
-    if(!editing) return; const prev = document.body.style.overflow; document.body.style.overflow='hidden'; return ()=>{ document.body.style.overflow=prev; };
-  },[editing]);
 
   // Replaced by global toast (addToast)
 
@@ -83,6 +78,7 @@ export default function ScheduleSegmentsClient(){
   const grouped = useMemo(()=>{
     const map: Record<number, Segment[]> = {1:[],2:[],3:[],4:[],5:[],6:[],7:[]};
     for(const s of activeSegments) map[s.weekday].push(s);
+    for (const day of Object.values(map)) day.sort((a,b)=>a.startMinute-b.startMinute);
     return map;
   }, [activeSegments]);
 
@@ -123,9 +119,11 @@ export default function ScheduleSegmentsClient(){
   }
 
   function startCreate(weekday: number){
+    setError(null);
     setEditing({ weekday, start: '09:00', end: '10:00', activityId: '', notes: '' });
   }
   function startEdit(s: Segment){
+    setError(null);
     setEditing({ id: s.id, weekday: s.weekday, start: minutesToHHMM(s.startMinute), end: minutesToHHMM(s.endMinute), activityId: s.activityId || '', notes: s.notes || '', versioningMode: 'now', effectiveFromDate: '' });
   }
   function reset(){ setEditing(null); }
@@ -133,6 +131,7 @@ export default function ScheduleSegmentsClient(){
   async function submit(e: React.FormEvent){
     e.preventDefault(); if(!editing) return; setSaving(true); setError(null);
     try {
+      if (hhmmToMinutes(editing.end) <= hhmmToMinutes(editing.start)) throw new Error('Choose an end time after the start time.');
       const body: any = {
         weekday: editing.weekday,
         startMinute: hhmmToMinutes(editing.start),
@@ -172,13 +171,12 @@ export default function ScheduleSegmentsClient(){
   }
 
   async function remove(id: string){
+    if (saving) return;
     if(pendingDeleteSegmentId !== id){
       setPendingDeleteSegmentId(id);
-      setTimeout(()=>{
-        setPendingDeleteSegmentId(curr => curr === id ? null : curr);
-      }, 4000);
       return;
     }
+    setSaving(true); setError(null);
     try {
       const res = await fetch(`/api/schedule/segments?id=${id}`, { method: 'DELETE' });
       const data = await res.json();
@@ -186,6 +184,7 @@ export default function ScheduleSegmentsClient(){
       setSegments(s => s.filter(x=>x.id!==id));
       setPendingDeleteSegmentId(null);
   } catch(e:any){ setError(e.message); addToast({ message: e.message || 'Failed to delete segment', type: 'error' }); }
+    finally { setSaving(false); }
   }
 
   const displayWeekdays = (filterWeekday === 'all') ? [1,2,3,4,5,6,7] : [filterWeekday];
@@ -197,25 +196,25 @@ export default function ScheduleSegmentsClient(){
         {/* Local toast system removed in favor of global provider */}
       </div>
       <div className="flex flex-wrap gap-3 items-center">
-        <h1 className="tt-heading-page text-lg">Schedule Segments</h1>
-        <select value={filterWeekday} onChange={e=>setFilterWeekday(e.target.value==='all'?'all':Number(e.target.value))} className="border rounded px-2 py-1 text-sm dark:bg-gray-900 dark:border-gray-700">
+        <h2 className="text-lg font-semibold">Your weekly routine</h2>
+        <select aria-label="Filter routine by day" value={filterWeekday} onChange={e=>setFilterWeekday(e.target.value==='all'?'all':Number(e.target.value))} className="tt-input !w-auto">
           <option value="all">All days</option>
           {weekdayNames.map((n,i)=>(<option key={i} value={i+1}>{n}</option>))}
         </select>
         <label className="flex items-center gap-1 text-xs cursor-pointer select-none">
           <input type="checkbox" checked={showFuture} onChange={e=>setShowFuture(e.target.checked)} />
-          <span>Show future versions</span>
+          <span>Show upcoming changes</span>
         </label>
   {editing && <Button variant="subtle" size="sm" onClick={reset} leftIcon={<IconClose className="w-3.5 h-3.5" />}>Cancel</Button>}
       </div>
-      {error && <div className="text-red-600 text-sm">{error}</div>}
-      {loading && <div className="text-sm">Loading...</div>}
+      {!editing && error && <ErrorState message={error} onRetry={loadAll} />}
+      {loading && <LoadingState label="Loading your routine…" />}
       {!loading && displayWeekdays.map(wd => (
         <div key={wd} className="tt-panel tt-panel-padding pt-3 pb-3">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="font-medium text-sm tt-text-muted">{weekdayNames[wd-1]}</h2>
+            <h3 className="text-base font-semibold">{weekdayNames[wd-1]}</h3>
             {!editing && (
-              <Button size="sm" variant="secondary" onClick={()=>startCreate(wd)} leftIcon={<IconAdd className="w-3.5 h-3.5" />}>Add</Button>
+              <Button size="sm" variant="secondary" onClick={()=>startCreate(wd)} leftIcon={<IconAdd className="w-3.5 h-3.5" />} aria-label={'Add time block for ' + weekdayNames[wd-1]}>Add block</Button>
             )}
           </div>
           <div className="space-y-2">
@@ -223,7 +222,7 @@ export default function ScheduleSegmentsClient(){
               const futureInfo = activeHasFuture[seg.id];
               const futureStackFull = futureByWeekday[wd].filter(f => f.startMinute < seg.endMinute && f.endMinute > seg.startMinute);
               const futureStack = showFuture ? futureStackFull : [];
-              const editDisabled = futureStack.length > 0;
+              const editDisabled = futureStackFull.length > 0;
               const diff = diffSummary(seg, futureStackFull);
               return (
                 <div key={seg.id} className="flex flex-col gap-1">
@@ -232,7 +231,7 @@ export default function ScheduleSegmentsClient(){
                     {seg.activity && <span className="px-1 rounded bg-gray-100 dark:bg-gray-800" style={{borderLeft: seg.activity.color ? '4px solid '+seg.activity.color : undefined}}>{seg.activity.name}</span>}
                     {seg.notes && <span className="italic text-gray-500 truncate max-w-[120px] sm:max-w-[160px]">{seg.notes}</span>}
                     {futureInfo && (
-                      <span className="text-[10px] px-1 rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300" title={`Future version scheduled for ${futureInfo.date}${diff? '\n'+diff:''}`}>Replaced {futureInfo.date}</span>
+                      <span className="text-xs px-1 rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300" title={`Future version scheduled for ${futureInfo.date}${diff? '\n'+diff:''}`}>Replaced {futureInfo.date}</span>
                     )}
                     <div className="ml-auto flex gap-1 items-center">
                       <IconButton
@@ -242,12 +241,12 @@ export default function ScheduleSegmentsClient(){
                         onClick={()=>!editDisabled && startEdit(seg)}
                         icon={<IconEdit className="w-3.5 h-3.5" />}
                         label="Edit segment"
-                        className={editDisabled ? 'opacity-40 cursor-not-allowed' : ''}
+                        title={editDisabled ? 'An upcoming change already exists. Edit that upcoming block below.' : 'Edit time block'}
                       />
                       <IconButton
                         size="sm"
                         variant={pendingDeleteSegmentId===seg.id ? 'danger' : 'subtle'}
-                        onClick={()=>remove(seg.id)}
+                        onClick={()=>{ setError(null); setPendingDeleteSegmentId(seg.id); }}
                         icon={<IconTrash className="w-3.5 h-3.5" />}
                         label={pendingDeleteSegmentId===seg.id? 'Confirm delete' : 'Delete segment'}
                         className={pendingDeleteSegmentId===seg.id ? 'animate-pulse' : ''}
@@ -257,7 +256,7 @@ export default function ScheduleSegmentsClient(){
                   {futureStack.length>0 && (
                     <div className="ml-4 border-l border-dashed border-gray-300 dark:border-gray-700 pl-3 space-y-1">
                       {futureStack.sort((a,b)=>a.startMinute-b.startMinute).map(f => (
-                        <div key={f.id} className="flex flex-wrap items-center gap-2 text-[10px] border border-indigo-200 dark:border-indigo-800 rounded px-2 py-1 bg-indigo-50 dark:bg-indigo-900/30" title={diffSummary(seg,[f]) || undefined}>
+                        <div key={f.id} className="flex flex-wrap items-center gap-2 text-xs border border-indigo-200 dark:border-indigo-800 rounded px-2 py-1 bg-indigo-50 dark:bg-indigo-900/30" title={diffSummary(seg,[f]) || undefined}>
                           <span className="font-mono">{minutesToHHMM(f.startMinute)}-{minutesToHHMM(f.endMinute)}</span>
                           {f.activity && <span className="px-1 rounded bg-gray-100 dark:bg-gray-800" style={{borderLeft: f.activity.color ? '4px solid '+f.activity.color : undefined}}>{f.activity.name}</span>}
                           <span className="text-indigo-700 dark:text-indigo-300">Future {new Date(f.effectiveFrom).toISOString().slice(0,10)}</span>
@@ -278,74 +277,78 @@ export default function ScheduleSegmentsClient(){
                 </div>
               );
             })}
-            {grouped[wd].length===0 && <div className="text-xs text-gray-500">No segments</div>}
+            {grouped[wd].length===0 && <div className="tt-text-muted py-3 text-sm">A little breathing room. Add a block when you have something planned.</div>}
           </div>
         </div>
       ))}
 
-      {editing && portalEl && createPortal(
-        <form onSubmit={submit} className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8 bg-black/40 backdrop-blur-sm overflow-y-auto">
-          <div className="relative bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded p-4 w-full max-w-md shadow-xl space-y-3 max-h-[calc(100vh-4rem)] overflow-y-auto">
-            <h3 className="font-medium text-sm mb-1">{editing.id ? 'Edit Segment' : 'New Segment'}</h3>
+      <Dialog open={!!editing} onClose={reset} title={editing?.id ? 'Edit time block' : 'Add a time block'} description="This block repeats each week as part of your routine." busy={saving}>
+      {editing && <form onSubmit={submit} className="space-y-5">
             <div className="grid grid-cols-2 gap-3 text-xs">
               <label className="space-y-1 col-span-2">
-                <span className="block text-[11px] uppercase tracking-wide text-gray-500">Weekday</span>
-                <select value={editing.weekday} onChange={e=>setEditing({...editing, weekday:Number(e.target.value)})} className="w-full border rounded p-1 dark:bg-gray-950 dark:border-gray-700">
+                <span className="tt-label">Weekday</span>
+                <select value={editing.weekday} onChange={e=>setEditing({...editing, weekday:Number(e.target.value)})} className="tt-input">
                   {weekdayNames.map((n,i)=>(<option key={i} value={i+1}>{n}</option>))}
                 </select>
               </label>
               <label className="space-y-1">
-                <span className="block text-[11px] uppercase tracking-wide text-gray-500">Start</span>
-                <input required type="time" value={editing.start} onChange={e=>setEditing({...editing, start:e.target.value})} className="w-full border rounded p-1 dark:bg-gray-950 dark:border-gray-700" />
+                <span className="tt-label">Start</span>
+                <input required type="time" value={editing.start} onChange={e=>setEditing({...editing, start:e.target.value})} className="tt-input" />
               </label>
               <label className="space-y-1">
-                <span className="block text-[11px] uppercase tracking-wide text-gray-500">End</span>
-                <input required type="time" value={editing.end} onChange={e=>setEditing({...editing, end:e.target.value})} className="w-full border rounded p-1 dark:bg-gray-950 dark:border-gray-700" />
+                <span className="tt-label">End</span>
+                <input required type="time" value={editing.end} onChange={e=>setEditing({...editing, end:e.target.value})} className="tt-input" />
               </label>
               <label className="space-y-1 col-span-2">
-                <span className="block text-[11px] uppercase tracking-wide text-gray-500">Activity (optional)</span>
-                <select value={editing.activityId} onChange={e=>setEditing({...editing, activityId:e.target.value})} className="w-full border rounded p-1 dark:bg-gray-950 dark:border-gray-700">
+                <span className="tt-label">Activity (optional)</span>
+                <select value={editing.activityId} onChange={e=>setEditing({...editing, activityId:e.target.value})} className="tt-input">
                   <option value="">-- None --</option>
                   {activities.map(a=> <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
               </label>
               <label className="space-y-1 col-span-2">
-                <span className="block text-[11px] uppercase tracking-wide text-gray-500">Notes</span>
-                <input maxLength={200} type="text" value={editing.notes} onChange={e=>setEditing({...editing, notes:e.target.value})} className="w-full border rounded p-1 dark:bg-gray-950 dark:border-gray-700" placeholder="Optional notes" />
+                <span className="tt-label">Notes</span>
+                <input maxLength={200} type="text" value={editing.notes} onChange={e=>setEditing({...editing, notes:e.target.value})} className="tt-input" placeholder="Optional notes" />
               </label>
               {editing.id && (
                 <div className="col-span-2 space-y-2 mt-1 border-t pt-2 border-gray-200 dark:border-gray-700">
-                  <span className="block text-[11px] uppercase tracking-wide text-gray-500">Versioning</span>
+                  <span className="tt-label">When should this change apply?</span>
                   <div className="space-y-1">
-                    <label className="flex items-center gap-2 cursor-pointer text-[11px]">
+                    <label className="flex items-center gap-2 cursor-pointer text-sm">
                       <input type="radio" name="versioning" value="now" checked={(editing.versioningMode||'now')==='now'} onChange={()=>setEditing({...editing, versioningMode:'now'})} />
-                      <span>Update current template now (no history)</span>
+                      <span>Update this block immediately</span>
                     </label>
-                    <label className="flex items-center gap-2 cursor-pointer text-[11px]">
+                    <label className="flex items-center gap-2 cursor-pointer text-sm">
                       <input type="radio" name="versioning" value="next-week" checked={editing.versioningMode==='next-week'} onChange={()=>setEditing({...editing, versioningMode:'next-week'})} />
                       <span>Apply starting next week ({(() => { const d = new Date(); const jsDay=d.getDay(); const days=((8-jsDay)%7)||7; d.setDate(d.getDate()+days); return d.toISOString().slice(0,10); })()})</span>
                     </label>
-                    <label className="flex items-start gap-2 cursor-pointer text-[11px]">
+                    <label className="flex items-start gap-2 cursor-pointer text-sm">
                       <input type="radio" name="versioning" value="custom-week" checked={editing.versioningMode==='custom-week'} onChange={()=>setEditing({...editing, versioningMode:'custom-week'})} />
                       <span className="flex flex-col gap-1">
-                        <span>Apply starting custom week (Monday)</span>
+                        <span>Choose a future week (starting Monday)</span>
                         {editing.versioningMode==='custom-week' && (
-                          <input type="date" value={editing.effectiveFromDate||''} onChange={e=>setEditing({...editing, effectiveFromDate:e.target.value})} className="border rounded p-1 dark:bg-gray-950 dark:border-gray-700 text-[11px]" />
+                          <input type="date" aria-label="Start date for the schedule change" required value={editing.effectiveFromDate||''} onChange={e=>setEditing({...editing, effectiveFromDate:e.target.value})} className="border rounded p-1 dark:bg-gray-950 dark:border-gray-700 text-sm" />
                         )}
                       </span>
                     </label>
-                    {editing.versioningMode==='custom-week' && editing.effectiveFromDate && (()=>{ const d=new Date(editing.effectiveFromDate+'T00:00:00'); if(isNaN(d.getTime())) return <p className="text-red-600 text-[10px]">Invalid date</p>; if(d.getDay()!==1) return <p className="text-red-600 text-[10px]">Date must be a Monday</p>; return null; })()}
-                    <p className="text-[10px] text-gray-500 leading-snug">Future versions keep the current template active until the Sunday before the new start.</p>
+                    {editing.versioningMode==='custom-week' && editing.effectiveFromDate && (()=>{ const d=new Date(editing.effectiveFromDate+'T00:00:00'); if(isNaN(d.getTime())) return <p className="text-red-600 text-xs">Invalid date</p>; if(d.getDay()!==1) return <p className="text-red-600 text-xs">Date must be a Monday</p>; return null; })()}
+                    <p className="tt-text-muted text-sm">Choosing a future week preserves your earlier schedule.</p>
                   </div>
                 </div>
               )}
             </div>
+            {error && <ErrorState message={error} />}
             <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="subtle" size="sm" onClick={reset} leftIcon={<IconClose className="w-3.5 h-3.5" />}>Cancel</Button>
+              <Button type="button" variant="subtle" size="sm" disabled={saving} onClick={reset} leftIcon={<IconClose className="w-3.5 h-3.5" />}>Cancel</Button>
               <Button type="submit" variant="primary" size="sm" disabled={saving} leftIcon={<IconSave className="w-3.5 h-3.5" />} loading={saving}>{saving ? 'Saving' : 'Save'}</Button>
             </div>
-          </div>
-        </form>, portalEl)}
+        </form>}
+      </Dialog>
+      <Dialog open={!!pendingDeleteSegmentId} onClose={() => setPendingDeleteSegmentId(null)} title="Delete this time block?" busy={saving}>
+        <p className="tt-text-muted">This removes the block from your routine. Your saved time entries will be kept.</p>
+        {error && <ErrorState message={error} />}
+        <div className="mt-6 flex justify-end gap-3"><Button disabled={saving} variant="secondary" onClick={() => setPendingDeleteSegmentId(null)}>Keep block</Button><Button variant="danger" loading={saving} onClick={() => pendingDeleteSegmentId && remove(pendingDeleteSegmentId)}>Delete block</Button></div>
+      </Dialog>
     </div>
   );
 }

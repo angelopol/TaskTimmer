@@ -1,67 +1,22 @@
 "use client";
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-
-// Keys & defaults
-const STORAGE_KEY = 'tt_theme';
-const prefersDark = () => typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches;
-
+import React, { createContext, useContext, useEffect, useCallback, useState } from 'react';
 export type Theme = 'light' | 'dark';
-interface ThemeContextValue {
-  theme: Theme;
-  toggle: () => void;
-  setTheme: (t: Theme) => void;
-}
-
-const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
-
-export function useTheme() {
-  const ctx = useContext(ThemeContext);
-  if (!ctx) throw new Error('useTheme must be used within <ThemeProvider>');
-  return ctx;
-}
-
-export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
-  const [theme, setThemeState] = useState<Theme>('light');
-
-  // Apply theme to <html>
-  const applyTheme = useCallback((t: Theme) => {
-    const root = document.documentElement;
-    if (t === 'dark') root.classList.add('dark'); else root.classList.remove('dark');
-  }, []);
-
-  const setTheme = useCallback((t: Theme) => {
-    setThemeState(t);
-    try { localStorage.setItem(STORAGE_KEY, t); } catch {}
-    applyTheme(t);
-  }, [applyTheme]);
-
-  const toggle = useCallback(() => {
-    setTheme(theme === 'dark' ? 'light' : 'dark');
-  }, [theme, setTheme]);
-
-  // Initialize
+const ThemeContext = createContext<{ theme:Theme; toggle:()=>void; setTheme:(theme:Theme)=>void } | undefined>(undefined);
+export function ThemeProvider({ children }: { children:React.ReactNode }) {
+  const [theme, setValue] = useState<Theme>('light');
+  const apply = useCallback((value:Theme) => { setValue(value); document.documentElement.classList.toggle('dark', value === 'dark'); }, []);
+  const setTheme = useCallback((value:Theme) => { try { localStorage.setItem('tt_theme', value); } catch {} apply(value); }, [apply]);
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
-      const initial = stored || (prefersDark() ? 'dark' : 'light');
-      setTheme(initial);
-    } catch {
-      setTheme(prefersDark() ? 'dark' : 'light');
-    }
-    // listen to system changes (optional)
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const listener = (e: MediaQueryListEvent) => {
-      if (!localStorage.getItem(STORAGE_KEY)) {
-        setTheme(e.matches ? 'dark' : 'light');
-      }
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const system = () => {
+      let stored:string | null = null;
+      try { stored = localStorage.getItem('tt_theme'); } catch {}
+      apply(stored === 'dark' || stored === 'light' ? stored : media.matches ? 'dark' : 'light');
     };
-    mq.addEventListener('change', listener);
-    return () => mq.removeEventListener('change', listener);
-  }, [setTheme]);
+    system(); media.addEventListener('change', system);
+    return () => media.removeEventListener('change', system);
+  }, [apply]);
+  return <ThemeContext.Provider value={{ theme, setTheme, toggle:() => setTheme(theme === 'dark' ? 'light' : 'dark') }}>{children}</ThemeContext.Provider>;
+}
+export function useTheme() { const context = useContext(ThemeContext); if (!context) throw new Error('Missing ThemeProvider'); return context; }
 
-  return (
-    <ThemeContext.Provider value={{ theme, toggle, setTheme }}>
-      {children}
-    </ThemeContext.Provider>
-  );
-};

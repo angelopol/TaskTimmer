@@ -1,0 +1,96 @@
+{
+  "results": [
+    {
+      "name": "login-light-desktop",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "login-mobile-errors",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "register-mobile",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "overview-mobile",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "start-timer-dialog-mobile",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "overview-dark-desktop",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "create-activity-dialog",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "activities-desktop",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "activities-mobile",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "time-log-mobile",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "schedule-agenda-mobile",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "schedule-log-dialog-mobile",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "schedule-block-dialog-mobile",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "schedule-grid-mobile",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "schedule-grid-desktop",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "schedule-dark-small-mobile",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "routine-dark-small-mobile",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "time-log-dark-small-mobile",
+      "violations": [],
+      "overflow": false
+    }
+  ],
+  "errors": [],
+  "failure": "locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByText('Choose an end time after the start time, on the same day.') to be visible\u001b[22m\n"
+}

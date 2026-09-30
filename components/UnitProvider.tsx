@@ -1,41 +1,13 @@
 "use client";
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-
+import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 export type Unit = 'min' | 'hr';
-
-type UnitContextValue = {
-  unit: Unit;
-  setUnit: (u: Unit) => void;
-};
-
-const UnitContext = createContext<UnitContextValue | undefined>(undefined);
-
-export function UnitProvider({ children }: { children: React.ReactNode }){
-  const [unit, setUnitState] = useState<Unit>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = window.localStorage.getItem('tt_unit');
-      if (stored === 'min' || stored === 'hr') return stored;
-    }
-    // Default to Hours as requested
-    return 'hr';
-  });
-
-  const setUnit = (u: Unit) => setUnitState(u);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('tt_unit', unit);
-    }
-  }, [unit]);
-
-  const value = useMemo(() => ({ unit, setUnit }), [unit]);
-  return (
-    <UnitContext.Provider value={value}>{children}</UnitContext.Provider>
-  );
+const UnitContext = createContext<{ unit:Unit; setUnit:(unit:Unit)=>void } | undefined>(undefined);
+export function UnitProvider({ children }: { children:React.ReactNode }) {
+  const [unit, setValue] = useState<Unit>('hr');
+  useEffect(() => { try { const saved = localStorage.getItem('tt_unit'); if (saved === 'hr' || saved === 'min') setValue(saved); } catch {} }, []);
+  const setUnit = useCallback((value:Unit) => { setValue(value); try { localStorage.setItem('tt_unit', value); } catch {} }, []);
+  const value = useMemo(() => ({ unit, setUnit }), [unit, setUnit]);
+  return <UnitContext.Provider value={value}>{children}</UnitContext.Provider>;
 }
+export function useUnit() { const context = useContext(UnitContext); if (!context) throw new Error('Missing UnitProvider'); return context; }
 
-export function useUnit(){
-  const ctx = useContext(UnitContext);
-  if(!ctx) throw new Error('useUnit must be used within UnitProvider');
-  return ctx;
-}

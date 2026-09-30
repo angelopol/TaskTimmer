@@ -1,21 +1,11 @@
-// Prisma schema
-// Default DB: SQLite (dev) -> lightweight, serverless.
-// To use MySQL:
-//  1. Update .env: DB_PROVIDER="mysql" and define MYSQL_* plus DATABASE_URL.
-//  2. Change provider to "mysql" below or use env("DB_PROVIDER") with a shadow database if needed.
-//  3. Run: npx prisma migrate dev --name init_mysql
-// Example DATABASE_URL: mysql://user:pass@localhost:3306/tasktimmer
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  // Provider must be a literal (Prisma validation forbids env() here). Switch manually when needed.
-  // For SQLite local dev you could temporarily set: provider = "sqlite" and url = "file:./prisma/dev.db".
-  // For production MySQL keep as below and ensure DATABASE_URL is a valid MySQL URL.
-  provider = "mysql"
+  provider  = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum TimeLogSource {

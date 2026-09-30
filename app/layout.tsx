@@ -12,7 +12,7 @@ const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
   title: 'TaskTimmer',
-  description: 'Activity-based time management'
+  description: 'Plan your week, track your activities, and make time for what matters.'
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -31,15 +31,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <meta name="description" content="Activity-based time management" />
       <meta name="color-scheme" content="light dark" />
     </head>
-    <body className={inter.className + ' min-h-screen bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100 transition-colors'}>
+    <body className={inter.className + ' min-h-screen'}>
+        <a href="#main-content" className="skip-link">Skip to content</a>
         <Providers>
           <WeekProvider>
             <ToastProvider>
-              <div className="max-w-5xl mx-auto p-4">
+              <div className="app-shell">
                 <Navbar />
+                <main id="main-content" tabIndex={-1} className="app-main">
                 <PageTransition>
                   {children}
                 </PageTransition>
+                </main>
                 <PWARegister />
               </div>
             </ToastProvider>

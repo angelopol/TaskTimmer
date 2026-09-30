@@ -46,3 +46,8 @@ prisma/dev.db-journal
 *.swo
 
 .env.production
+
+u619022423_tasktimmer.sql
+tasktimmer.postgresql-data.sql
+__pycache__/
+*.pyc

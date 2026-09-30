@@ -33,7 +33,7 @@ export function useApiClient(){
     try {
       res = await fetch(url, init);
     } catch (e:any){
-      return { ok:false, status:0, data:null, error: e.message || 'Network error', raw: new Response() };
+      return { ok:false, status:0, data:null, error: 'Unable to connect. Check your internet connection and try again.', raw: new Response() };
     }
     if(res.status === 401){
       // Trigger signOut and surface unauthorized error
@@ -46,7 +46,10 @@ export function useApiClient(){
     let parsed: any = null;
     try { parsed = await res.json(); } catch { /* ignore parse errors */ }
     if(!res.ok){
-      const err = parsed?.error || `HTTP ${res.status}`;
+      const validation = parsed?.error?.fieldErrors;
+      const fields = validation ? Object.values(validation).flat().filter(Boolean).join(' ') : '';
+      const err = fields || (typeof parsed?.error === 'string' ? parsed.error : '') ||
+        (res.status >= 500 ? 'Something went wrong while saving or loading your information. Please try again.' : 'Please check the information and try again.');
       return { ok:false, status: res.status, data:null, error: err, raw: res };
     }
     return { ok:true, status: res.status, data: parsed as T, error: null, raw: res };

@@ -1,148 +1,52 @@
 "use client";
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { signIn } from 'next-auth/react';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useToast } from './toast/ToastProvider';
+import { Button, IconButton } from './ui/Button';
+import { IconEye, IconEyeOff } from './ui/icons';
+import { ErrorState } from './ui/Feedback';
 
-interface Props {
-  mode: 'login' | 'register';
-  onSuccess?: () => void;
-}
-
-export const AuthForm: React.FC<Props> = ({ mode, onSuccess }) => {
+export function AuthForm({ mode, onSuccess }: { mode:'login' | 'register'; onSuccess?:()=>void }) {
+  const creating = mode === 'register';
   const [error, setError] = useState('');
-  const [statusMsg, setStatusMsg] = useState('');
-  const [remember, setRemember] = useState(true);
-  const { addToast } = useToast();
-
-  // Use a discriminated union so TypeScript knows when name exists
-  const loginSchema = z.object({
-    email: z.string().email('Invalid email'),
-    password: z.string().min(6, 'Minimum 6 characters')
+  const [remember, setRemember] = useState(false);
+  const [visible, setVisible] = useState(false);
+  const schema = z.object({
+    name:creating ? z.string().trim().min(2, 'Enter at least 2 characters.').max(60, 'Use 60 characters or fewer.') : z.string().optional(),
+    email:z.string().trim().email('Enter a valid email address.'),
+    password:z.string().min(creating ? 6 : 1, creating ? 'Use at least 6 characters.' : 'Enter your password.')
   });
-  const registerSchema = loginSchema.extend({
-    name: z.string().min(2, 'Name too short').max(60, 'Name too long')
-  });
-
-  type LoginValues = z.infer<typeof loginSchema>;
-  type RegisterValues = z.infer<typeof registerSchema>;
-  type FormValues = LoginValues | RegisterValues;
-
-  const schema = (mode === 'register' ? registerSchema : loginSchema);
-
-  const { register, handleSubmit, formState, watch, reset } = useForm<FormValues>({
-    resolver: zodResolver(schema),
-    mode: 'onBlur'
-  });
-  const { errors, isSubmitting, isValidating } = formState;
-
-  const passwordValue = watch('password') || '';
-
-  // Simple password strength heuristic
-  const strength = useMemo(() => {
-    if (!passwordValue) return { score: 0, label: 'Empty', color: 'bg-gray-600' };
-    let score = 0;
-    if (passwordValue.length >= 6) score++;
-    if (passwordValue.length >= 10) score++;
-    if (/[A-Z]/.test(passwordValue)) score++;
-    if (/[a-z]/.test(passwordValue)) score++;
-    if (/\d/.test(passwordValue)) score++;
-    if (/[^A-Za-z0-9]/.test(passwordValue)) score++;
-    const pct = Math.min(100, Math.round((score / 6) * 100));
-    let label = 'Weak';
-    if (pct >= 80) label = 'Strong'; else if (pct >= 55) label = 'Medium';
-    const color = pct >= 80 ? 'bg-green-500' : pct >= 55 ? 'bg-yellow-500' : 'bg-red-500';
-    return { score: pct, label, color };
-  }, [passwordValue]);
-
-  async function onSubmit(values: FormValues) {
+  type Values = z.infer<typeof schema>;
+  const { register, handleSubmit, formState:{ errors, isSubmitting } } = useForm<Values>({ resolver:zodResolver(schema), mode:'onBlur' });
+  async function submit(values:Values) {
     setError('');
-    setStatusMsg(mode === 'register' ? 'Creating account…' : 'Checking credentials…');
     try {
-      if (mode === 'register') {
-        const res = await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(values) });
-        if (!res.ok) {
-          const j = await res.json().catch(()=>({}));
-          throw new Error(j.error || 'Registration error');
-        }
+      if (creating) {
+        const response = await fetch('/api/auth/register', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(values) });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(response.status === 409 ? 'This email already has an account. Please sign in.' : typeof data.error === 'string' ? data.error : 'We could not create your account. Please try again.');
       }
-      const result = await signIn('credentials', { redirect: false, email: (values as any).email, password: (values as any).password, remember: remember ? '1' : '0' });
-      if (result?.error) throw new Error(result.error || 'Invalid credentials');
-  addToast({ type: 'success', message: mode === 'register' ? 'Account created' : 'Welcome back' });
-  onSuccess?.();
-  // Slight delay so user sees toast before navigation (SW/app router may still keep toast if provider is global)
-  setTimeout(()=>{ window.location.replace('/'); }, 120);
-    } catch (err: any) {
-      setError(err.message || 'Error');
-    } finally {
-      setStatusMsg('');
+      const result = await signIn('credentials', { redirect:false, email:values.email, password:values.password, remember:remember ? '1' : '0' });
+      if (!result?.ok || result.error) throw new Error('We could not sign you in. Check your email and password and try again.');
+      onSuccess?.(); window.location.replace('/');
+    } catch (reason) {
+      setError(reason instanceof Error && reason.message !== 'Failed to fetch' ? reason.message : 'Unable to connect. Check your internet connection and try again.');
     }
   }
+  return <form onSubmit={handleSubmit(submit)} noValidate className="space-y-5" aria-busy={isSubmitting}>
+    {creating && <div><label htmlFor="name" className="tt-label">Your name</label><input id="name" autoComplete="name" className="tt-input" placeholder="How should we call you?" aria-invalid={!!errors.name} aria-describedby={errors.name ? 'name-error' : undefined} {...register('name')} />{errors.name && <p id="name-error" className="mt-2 text-sm text-red-700 dark:text-red-300">{errors.name.message}</p>}</div>}
+    <div><label htmlFor="email" className="tt-label">Email address</label><input id="email" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} className="tt-input" placeholder="you@example.com" aria-invalid={!!errors.email} aria-describedby={errors.email ? 'email-error' : undefined} {...register('email')} />{errors.email && <p id="email-error" className="mt-2 text-sm text-red-700 dark:text-red-300">{errors.email.message}</p>}</div>
+    <div><label htmlFor="password" className="tt-label">Password</label><div className="relative">
+      <input id="password" type={visible ? 'text' : 'password'} autoComplete={creating ? 'new-password' : 'current-password'} className="tt-input !pr-14" aria-invalid={!!errors.password} aria-describedby={errors.password ? 'password-error' : creating ? 'password-help' : undefined} {...register('password')} />
+      <IconButton className="absolute right-1 top-1/2 -translate-y-1/2" icon={visible ? <IconEyeOff size={19} /> : <IconEye size={19} />} label={visible ? 'Hide password' : 'Show password'} aria-pressed={visible} variant="ghost" onClick={() => setVisible(!visible)} />
+    </div>{creating && <p id="password-help" className="tt-text-muted mt-2 text-sm">Use at least 6 characters. A longer password is more secure.</p>}{errors.password && <p id="password-error" className="mt-2 text-sm text-red-700 dark:text-red-300">{errors.password.message}</p>}</div>
+    <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm"><input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />Keep me signed in on this device</label>
+    {error && <ErrorState message={error} />}
+    <Button type="submit" size="md" loading={isSubmitting} className="w-full">{isSubmitting ? (creating ? 'Creating your account…' : 'Signing in…') : creating ? 'Create account' : 'Sign in'}</Button>
+    <p className="tt-text-muted pt-2 text-center text-sm">{creating ? 'Already have an account?' : 'New to TaskTimmer?'}{' '}<Link className="tt-link" href={creating ? '/login' : '/register'}>{creating ? 'Sign in' : 'Create an account'}</Link></p>
+  </form>;
+}
 
-  const otherMode = mode === 'login' ? 'register' : 'login';
-  return (
-    <form onSubmit={handleSubmit(onSubmit)} className="tt-form-grid gap-4">
-      {mode === 'register' && (
-        <div className="col-span-full">
-          <label className="block text-sm font-medium mb-1" htmlFor="name">Name</label>
-          <input id="name" className="tt-input w-full" placeholder="Your name" autoComplete="name" {...register('name' as any)} />
-          {(errors as any).name && <p className="mt-1 text-xs text-red-400">{(errors as any).name.message}</p>}
-        </div>
-      )}
-      <div className="col-span-full">
-        <label className="block text-sm font-medium mb-1" htmlFor="email">Email</label>
-        <input id="email" className="tt-input w-full" placeholder="you@example.com" autoComplete="email" inputMode="email" {...register('email')} />
-        {errors.email && <p className="mt-1 text-xs text-red-400">{errors.email.message}</p>}
-      </div>
-      <div className="col-span-full">
-        <label className="block text-sm font-medium mb-1" htmlFor="password">Password</label>
-        <input id="password" type="password" className="tt-input w-full" placeholder="********" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} {...register('password')} />
-        {mode === 'register' && (
-          <div className="mt-2 space-y-1">
-            <div className="h-2 w-full bg-gray-700 rounded overflow-hidden">
-              <div className={`h-full transition-all duration-300 ${strength.color}`} style={{ width: `${strength.score}%` }} />
-            </div>
-            <p className="text-xs text-gray-400 flex justify-between"><span>Password strength:</span><span className={`font-medium ${strength.color.replace('bg-','text-')}`}>{strength.label}</span></p>
-          </div>
-        )}
-        {errors.password && <p className="mt-1 text-xs text-red-400">{errors.password.message}</p>}
-      </div>
-      <div className="col-span-full flex items-center justify-between text-xs select-none">
-        <label className="inline-flex items-center gap-2 cursor-pointer">
-          <input
-            id="remember"
-            type="checkbox"
-            className="h-4 w-4 rounded border-gray-600 bg-gray-800"
-            checked={remember}
-            onChange={e => setRemember(e.target.checked)}
-          />
-          <span className="text-gray-300">Remember me</span>
-        </label>
-        <span className="text-gray-500">{mode === 'login' ? 'Min 6 chars' : strength.label === 'Strong' ? 'Great password!' : 'Aim for Strong'}</span>
-      </div>
-      {error && <p className="col-span-full text-red-400 text-sm font-medium" role="alert">{error}</p>}
-      <div className="col-span-full space-y-2">
-        <button
-          disabled={isSubmitting || isValidating}
-          className="w-full inline-flex justify-center items-center gap-2 rounded-md bg-blue-600 hover:bg-blue-500 active:bg-blue-700 transition-colors text-white font-medium py-2.5 disabled:opacity-50 disabled:cursor-not-allowed shadow focus:outline-none focus-visible:ring focus-visible:ring-blue-400/60">
-          {isSubmitting ? (mode === 'login' ? 'Signing in…' : 'Creating…') : (mode === 'login' ? 'Sign in' : 'Create account')}
-        </button>
-        {(statusMsg || isValidating) && (
-          <p className="text-center text-xs text-gray-400 h-4" role="status">
-            {statusMsg || 'Validating…'}
-          </p>
-        )}
-        {!statusMsg && !isValidating && <div className="h-4" />}
-        <p className="text-center text-sm text-gray-400">
-          {mode === 'login' ? 'No account?' : 'Already have an account?'}{' '}
-          <Link href={`/${otherMode}`} className="text-blue-400 hover:text-blue-300 font-medium underline underline-offset-2">
-            {mode === 'login' ? 'Register' : 'Login'}
-          </Link>
-        </p>
-      </div>
-    </form>
-  );
-};

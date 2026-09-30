@@ -1,35 +1,26 @@
 "use client";
 import { useEffect, useState } from 'react';
-
-export function PWARegister(){
+import { Button } from './ui/Button';
+export function PWARegister() {
   const [updated, setUpdated] = useState(false);
-  useEffect(()=>{
-    if(!('serviceWorker' in navigator)) return;
-    const registerSW = async () => {
-      try {
-        const reg = await navigator.serviceWorker.register('/sw.js');
-        // Listen for updates
-        reg.addEventListener('updatefound', () => {
-          const nw = reg.installing;
-          if(!nw) return;
-          nw.addEventListener('statechange', () => {
-            if (nw.state === 'installed' && navigator.serviceWorker.controller) {
-              setUpdated(true);
-            }
+  const [offline, setOffline] = useState(false);
+  useEffect(() => {
+    const sync = () => setOffline(!navigator.onLine);
+    sync(); window.addEventListener('online', sync); window.addEventListener('offline', sync);
+    if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').then(registration => {
+        registration.addEventListener('updatefound', () => {
+          const worker = registration.installing;
+          worker?.addEventListener('statechange', () => {
+            if (worker.state === 'installed' && navigator.serviceWorker.controller) setUpdated(true);
           });
         });
-      } catch(e){
-        console.warn('SW registration failed', e);
-      }
-    };
-    registerSW();
+      }).catch(() => {});
+    }
+    return () => { window.removeEventListener('online', sync); window.removeEventListener('offline', sync); };
   }, []);
-
-  if(!updated) return null;
-  return (
-    <div className="fixed bottom-3 right-3 z-50 tt-panel tt-panel-padding shadow-lg flex items-center gap-3">
-      <span className="text-xs">Nueva versión disponible</span>
-      <button className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-500" onClick={()=> window.location.reload() }>Actualizar</button>
-    </div>
-  );
+  if (!updated && !offline) return null;
+  return <div role="status" className="tt-panel fixed bottom-4 left-4 z-40 max-w-[calc(100%-2rem)] p-4 shadow-lg sm:max-w-sm">
+    {offline ? <p className="text-sm">You are offline. Reconnect before saving changes.</p> : <><p className="text-sm">An update is ready. Finish saving your work, then reload.</p><div className="mt-3 flex gap-2"><Button onClick={() => window.location.reload()}>Reload</Button><Button variant="ghost" onClick={() => setUpdated(false)}>Later</Button></div></>}
+  </div>;
 }

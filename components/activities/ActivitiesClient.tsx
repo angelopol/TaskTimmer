@@ -1,259 +1,116 @@
 "use client";
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { useApiClient } from '../useApiClient';
 import { useToast } from '../toast/ToastProvider';
-import { Button, IconButton } from '../ui/Button';
-import { IconAdd, IconEdit, IconTrash, IconSave, IconClose } from '../ui/icons';
 import { useUnit } from '../UnitProvider';
 import { fmtMinutes, fmtHoursMinutes } from '../../lib/time';
+import { Button, IconButton } from '../ui/Button';
+import { Dialog } from '../ui/Dialog';
+import { EmptyState, ErrorState, LoadingState } from '../ui/Feedback';
+import { UnitSwitch } from '../ui/UnitSwitch';
+import { IconAdd, IconEdit, IconTrash } from '../ui/icons';
 
-interface Activity { id: string; name: string; color: string | null; weeklyTargetMinutes: number; createdAt: string; }
-
+interface Activity { id:string; name:string; color:string | null; weeklyTargetMinutes:number; }
+const palette = [{ value:'#6366f1', name:'Indigo' }, { value:'#0d9488', name:'Teal' }, { value:'#d97706', name:'Amber' }, { value:'#e11d48', name:'Rose' }, { value:'#7c3aed', name:'Violet' }, { value:'#0284c7', name:'Sky blue' }];
+const blank = { name:'', color:'#6366f1', hours:0, minutes:0 };
 export default function ActivitiesClient() {
+  const { apiFetch } = useApiClient();
   const { addToast } = useToast();
-  const { unit, setUnit } = useUnit();
+  const { unit } = useUnit();
   const [items, setItems] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [form, setForm] = useState({ name: '', color: '#2563eb', weeklyTargetMinutes: 0 });
-  const [creating, setCreating] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editData, setEditData] = useState<{ name: string; color: string; weeklyTargetMinutes: number }>({ name: '', color: '#000000', weeklyTargetMinutes: 0 });
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null); // two-step delete
   const [search, setSearch] = useState('');
-
-  async function load() {
-    try {
-      setLoading(true);
-      const res = await fetch('/api/activities');
-      if (!res.ok) throw new Error('Failed loading activities');
-      const json = await res.json();
-      setItems(json.activities || []);
-    } catch (e:any) {
-      setError(e.message);
-      addToast({ message: e.message || 'Load error', type: 'error' });
-    } finally { setLoading(false); }
+  const [editing, setEditing] = useState<Activity | 'new' | null>(null);
+  const [form, setForm] = useState(blank);
+  const [formError, setFormError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<Activity | null>(null);
+  const load = useCallback(async () => {
+    setLoading(true); setError('');
+    const response = await apiFetch<{ activities:Activity[] }>('/api/activities');
+    if (response.ok) setItems(response.data?.activities || []);
+    else setError(response.error || 'Your activities could not be loaded.');
+    setLoading(false);
+  }, [apiFetch]);
+  useEffect(() => { load(); }, [load]);
+  function edit(activity?:Activity) {
+    setFormError('');
+    setForm(activity ? { name:activity.name, color:activity.color || '#6366f1', hours:Math.floor(activity.weeklyTargetMinutes/60), minutes:activity.weeklyTargetMinutes%60 } : blank);
+    setEditing(activity || 'new');
   }
-  useEffect(()=>{ load(); }, []);
-
-  async function createActivity(e: React.FormEvent) {
-    e.preventDefault();
-    try {
-      setCreating(true);
-      const res = await fetch('/api/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
-      if (!res.ok) throw new Error('Create failed');
-      setForm({ name: '', color: '#2563eb', weeklyTargetMinutes: 0 });
-      load();
-  } catch (e:any) { setError(e.message); addToast({ message: e.message || 'Failed to create activity', type: 'error' }); } finally { setCreating(false); }
-  if(!error) addToast({ message: 'Created activity', type: 'success' });
+  async function save(event:React.FormEvent) {
+    event.preventDefault(); if (saving) return;
+    setSaving(true); setFormError('');
+    const creating = editing === 'new';
+    const id = editing && editing !== 'new' ? editing.id : '';
+    const response = await apiFetch<{ activity:Activity }>('/api/activities' + (creating ? '' : '?id=' + id), {
+      method:creating ? 'POST' : 'PATCH', json:{ name:form.name.trim(), color:form.color, weeklyTargetMinutes:form.hours*60 + form.minutes }
+    });
+    setSaving(false);
+    if (!response.ok || !response.data) { setFormError(response.error || 'Could not save this activity. Please try again.'); return; }
+    const saved = response.data.activity;
+    setItems(previous => creating ? [...previous, saved] : previous.map(item => item.id === saved.id ? saved : item));
+    setEditing(null);
+    addToast({ type:'success', message:creating ? 'Activity created. You are ready to start tracking.' : 'Activity updated.' });
   }
-
-  function startEdit(it: Activity) {
-    setEditingId(it.id);
-    setEditData({ name: it.name, color: it.color || '#000000', weeklyTargetMinutes: it.weeklyTargetMinutes });
+  async function remove() {
+    if (!deleting || saving) return;
+    setSaving(true); setFormError('');
+    const response = await apiFetch('/api/activities?id=' + deleting.id, { method:'DELETE' });
+    setSaving(false);
+    if (!response.ok) { setFormError(response.error || 'Could not delete this activity.'); return; }
+    setItems(previous => previous.filter(item => item.id !== deleting.id));
+    setDeleting(null); addToast({ type:'success', message:'Activity deleted. Your saved time logs have been kept.' });
   }
-
-  async function saveEdit(id: string) {
-    try {
-      const res = await fetch(`/api/activities?id=${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editData) });
-      if (!res.ok) throw new Error('Update failed');
-      setEditingId(null);
-      load();
-  } catch (e:any) { setError(e.message); addToast({ message: e.message || 'Failed to update activity', type: 'error' }); return; }
-  addToast({ message: 'Updated activity', type: 'success' });
-  }
-
-  async function remove(id: string) {
-    if(pendingDeleteId !== id){
-      setPendingDeleteId(id);
-      setTimeout(()=>{
-        setPendingDeleteId(curr => curr === id ? null : curr);
-      }, 4000);
-      return;
-    }
-    try {
-      const res = await fetch(`/api/activities?id=${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Delete failed');
-      setPendingDeleteId(null);
-      load();
-  } catch (e:any) { setError(e.message); addToast({ message: e.message || 'Failed to delete activity', type: 'error' }); return; }
-  addToast({ message: 'Deleted activity', type: 'success' });
-  }
-
-  const filteredItems = useMemo(()=>{
-    if(!search.trim()) return items;
-    const q = search.toLowerCase();
-    return items.filter(i => i.name.toLowerCase().includes(q));
-  }, [items, search]);
-
-  return (
-    <div className="space-y-6">
-      <header className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="tt-heading-page">Activities</h1>
-        <div className="w-full sm:w-auto">
-          <div className="flex items-center gap-1 overflow-x-auto sm:overflow-visible [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Units switch">
-            <Button className="shrink-0" size="sm" variant={unit==='min' ? 'primary' : 'ghost'} onClick={()=>setUnit('min')}>Min</Button>
-            <Button className="shrink-0" size="sm" variant={unit==='hr' ? 'primary' : 'ghost'} onClick={()=>setUnit('hr')}>Hours</Button>
-          </div>
-        </div>
-      </header>
-
-      <section className="tt-panel tt-panel-padding space-y-4">
-        <h2 className="tt-heading-section">New Activity</h2>
-        <form onSubmit={createActivity} className="grid gap-4 md:grid-cols-[1fr_auto_auto_auto] items-end">
-          <div className="flex flex-col gap-1">
-            <label className="uppercase tracking-wide text-gray-500 dark:text-gray-400 text-[11px]">Name</label>
-            <input required value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} className="w-full border rounded p-1 text-xs dark:bg-gray-950 dark:border-gray-700" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="uppercase tracking-wide text-gray-500 dark:text-gray-400 text-[11px]">Color</label>
-            <input aria-label="Activity color" type="color" value={form.color} onChange={e=>setForm(f=>({...f,color:e.target.value}))} className="h-9 w-12 p-1 border rounded dark:bg-gray-950 dark:border-gray-700" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="uppercase tracking-wide text-gray-500 dark:text-gray-400 text-[11px]">Weekly Target (m)</label>
-            <input type="number" min={0} value={form.weeklyTargetMinutes} onChange={e=>setForm(f=>({...f,weeklyTargetMinutes:Number(e.target.value)}))} className="w-28 border rounded p-1 text-xs dark:bg-gray-950 dark:border-gray-700" />
-            <div className="text-[10px] text-gray-500 dark:text-gray-400 flex items-center gap-2">
-              <span>Used for progress metrics & weekly goal tracking.</span>
-              {unit==='hr' && (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                  ≈ {fmtHoursMinutes(form.weeklyTargetMinutes)}
-                </span>
-              )}
+  const filtered = items.filter(item => item.name.toLowerCase().includes(search.trim().toLowerCase()));
+  return <div className="space-y-7">
+    <header className="tt-page-header"><div><p className="tt-eyebrow mb-2">What matters to you</p><h1 className="tt-heading-page">Your activities</h1><p className="tt-text-muted mt-2">Give your time a purpose. Work, learn, move, or take a break.</p></div>
+      <Button size="md" leftIcon={<IconAdd size={18} />} onClick={() => edit()}>New activity</Button></header>
+    {items.length > 0 && <div className="flex flex-wrap items-end justify-between gap-4">
+      <label className="w-full sm:max-w-sm"><span className="tt-label">Find an activity</span><input type="search" className="tt-input" placeholder="Search by name" value={search} onChange={e => setSearch(e.target.value)} /></label><UnitSwitch />
+    </div>}
+    {loading ? <LoadingState label="Loading your activities…" /> : error ? <ErrorState message={error} onRetry={load} /> : !items.length ?
+      <EmptyState title="Start with something you care about" description="Try “Studying”, “Exercise”, or “Personal project”. You can add a weekly goal or simply track your time.">
+        <Button onClick={() => edit()} leftIcon={<IconAdd size={18} />}>Create your first activity</Button>
+      </EmptyState> : !filtered.length ?
+      <EmptyState title="No matching activities" description="Try a different name, or clear your search to see all your activities."><Button variant="secondary" onClick={() => setSearch('')}>Clear search</Button></EmptyState> :
+      <><p className="tt-text-muted text-sm" role="status">{filtered.length} {filtered.length === 1 ? 'activity' : 'activities'}</p><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {filtered.map(activity => <article key={activity.id} className="tt-panel flex flex-col overflow-hidden">
+          <div className="h-1.5" aria-hidden="true" style={{ background:activity.color || '#6366f1' }} />
+          <div className="flex flex-1 flex-col p-6">
+            <h2 className="text-lg font-semibold">{activity.name}</h2>
+            <p className="tt-text-muted mt-3 text-sm">{activity.weeklyTargetMinutes > 0 ? 'Weekly goal' : 'Track at your own pace'}</p>
+            <p className="mt-1 text-2xl font-semibold tracking-tight">{activity.weeklyTargetMinutes > 0 ? (unit === 'hr' ? fmtHoursMinutes(activity.weeklyTargetMinutes) : fmtMinutes(activity.weeklyTargetMinutes)) : 'No goal set'}</p>
+            <div className="mt-6 flex items-center justify-between gap-2 border-t border-slate-200 pt-4 dark:border-slate-700">
+              <Button variant="secondary" leftIcon={<IconEdit size={16} />} onClick={() => edit(activity)} aria-label={'Edit ' + activity.name}>Edit activity</Button>
+              <IconButton variant="ghost" icon={<IconTrash size={18} />} label={'Delete ' + activity.name} onClick={() => { setFormError(''); setDeleting(activity); }} />
             </div>
           </div>
-          <div className="flex md:justify-end">
-            <Button type="submit" loading={creating} leftIcon={<IconAdd size={14} />}>{creating ? 'Saving...' : 'Add Activity'}</Button>
+        </article>)}
+      </div></>}
+    <Dialog open={!!editing} onClose={() => setEditing(null)} title={editing === 'new' ? 'Create an activity' : 'Edit activity'} description="Make it easy to recognize the things you spend time on." busy={saving}>
+      <form onSubmit={save} className="space-y-5">
+        <label className="block"><span className="tt-label">Activity name</span><input autoFocus required minLength={2} maxLength={60} className="tt-input" placeholder="For example, Learning Spanish" value={form.name} onChange={e => setForm({ ...form, name:e.target.value })} /></label>
+        <fieldset><legend className="tt-label">Color</legend><div className="flex flex-wrap items-center gap-2">
+          {palette.map(color => <button key={color.value} type="button" aria-label={color.name} aria-pressed={form.color === color.value} onClick={() => setForm({ ...form, color:color.value })} className={'flex h-11 w-11 items-center justify-center rounded-xl border-2 ' + (form.color === color.value ? 'border-indigo-600 dark:border-indigo-300' : 'border-transparent')}><span className="h-7 w-7 rounded-full" style={{ background:color.value }} /></button>)}
+          <label><span className="sr-only">Custom activity color</span><input type="color" className="rounded-lg" value={form.color} onChange={e => setForm({ ...form, color:e.target.value })} /></label>
+        </div></fieldset>
+        <fieldset><legend className="tt-label">Weekly goal <span className="tt-text-muted font-normal">(optional)</span></legend><p id="goal-help" className="tt-text-muted mb-3 text-sm">Leave at zero to track time without a target.</p>
+          <div className="grid grid-cols-2 gap-4">
+            <label><span className="tt-label">Hours</span><input type="number" min={0} max={1666} step={1} required aria-describedby="goal-help" className="tt-input" value={form.hours} onChange={e => setForm({ ...form, hours:Number(e.target.value) })} /></label>
+            <label><span className="tt-label">Minutes</span><input type="number" min={0} max={59} step={1} required className="tt-input" value={form.minutes} onChange={e => setForm({ ...form, minutes:Number(e.target.value) })} /></label>
           </div>
-        </form>
-      </section>
-
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-center gap-3 justify-between">
-          <h2 className="tt-heading-section">List</h2>
-          <div className="flex items-center gap-2 ml-auto">
-            <input
-              type="text"
-              placeholder="Search activities..."
-              value={search}
-              onChange={e=> setSearch(e.target.value)}
-              className="border rounded px-2 py-1 text-xs dark:bg-gray-950 dark:border-gray-700 w-48"
-              aria-label="Search activities"
-            />
-            {search && (
-              <Button size="sm" variant="ghost" onClick={()=> setSearch('')}>Clear</Button>
-            )}
-          </div>
-        </div>
-        {loading && <p>Loading...</p>}
-        {error && <p className="text-red-600 text-sm">{error}</p>}
-        {/* Mobile cards */}
-        <div className="grid gap-2 sm:hidden">
-          {filteredItems.map(it => {
-            const editing = editingId === it.id;
-            return (
-              <div key={it.id} className="border border-gray-200 dark:border-gray-700 rounded p-3 bg-white dark:bg-gray-900 text-[11px] flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  {editing ? (
-                    <input value={editData.name} onChange={e=>setEditData(d=>({...d,name:e.target.value}))} className="border dark:border-gray-700 rounded px-2 py-1 bg-white dark:bg-gray-950 text-[11px]" />
-                  ) : (
-                    <span className="flex items-center gap-2 font-medium"><span className="w-3 h-3 rounded-full inline-block" style={{background:it.color||'#999'}} />{it.name}</span>
-                  )}
-                  <span className="text-[10px] text-gray-500">{unit==='min' ? fmtMinutes(it.weeklyTargetMinutes) : fmtHoursMinutes(it.weeklyTargetMinutes)}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {editing ? (
-                    <>
-                      <input aria-label="Edit color" type="color" value={editData.color} onChange={e=>setEditData(d=>({...d,color:e.target.value}))} className="h-7 w-9 p-1 border dark:border-gray-700 rounded bg-white dark:bg-gray-950" />
-                      <input aria-label="Edit weekly target (minutes)" type="number" min={0} value={editData.weeklyTargetMinutes} onChange={e=>setEditData(d=>({...d,weeklyTargetMinutes:Number(e.target.value)}))} className="w-20 border dark:border-gray-700 rounded px-2 py-1 bg-white dark:bg-gray-950 text-[11px]" />
-                    </>
-                  ) : (
-                    <span className="text-[10px] text-gray-500">{it.color}</span>
-                  )}
-                  <div className="ml-auto flex gap-2">
-                    {editing ? (
-                      <>
-                        <Button variant="primary" size="sm" onClick={()=>saveEdit(it.id)} leftIcon={<IconSave size={14} />}>Save</Button>
-                        <Button variant="ghost" size="sm" onClick={()=>setEditingId(null)} leftIcon={<IconClose size={14} />}>Cancel</Button>
-                      </>
-                    ) : (
-                      <>
-                        <Button variant="secondary" size="sm" onClick={()=>startEdit(it)} leftIcon={<IconEdit size={14} />}>Edit</Button>
-                        <Button variant={pendingDeleteId===it.id? 'danger':'ghost'} size="sm" onClick={()=>remove(it.id)} leftIcon={<IconTrash size={14} />}>{pendingDeleteId===it.id? 'Confirm' : 'Delete'}</Button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-          {filteredItems.length === 0 && !loading && <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-xs">No activities found.</div>}
-        </div>
-        {/* Desktop table */}
-        <div className="overflow-x-auto hidden sm:block">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 uppercase text-[10px] tracking-wide">
-                <th className="text-left px-3 py-2 font-semibold">Activity</th>
-                <th className="text-left px-3 py-2 font-semibold">Color</th>
-                <th className="text-left px-3 py-2 font-semibold">Weekly Target {unit==='min' ? '(min)' : '(hours)'}</th>
-                <th className="text-right px-3 py-2 font-semibold">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {filteredItems.map(it => {
-                const editing = editingId === it.id;
-                return (
-                  <tr key={it.id} className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                    <td className="px-3 py-2 align-middle">
-                      {editing ? (
-                        <input value={editData.name} onChange={e=>setEditData(d=>({...d,name:e.target.value}))} className="w-full border rounded px-2 py-1 text-xs dark:bg-gray-950 dark:border-gray-700" />
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-full" style={{background:it.color||'#999'}} />
-                          <span className="font-medium text-gray-800 dark:text-gray-200">{it.name}</span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 align-middle">
-                      {editing ? (
-                        <input type="color" value={editData.color} onChange={e=>setEditData(d=>({...d,color:e.target.value}))} className="h-8 w-10 p-1 border rounded dark:bg-gray-950 dark:border-gray-700" />
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-[10px] font-mono text-gray-600 dark:text-gray-300">{it.color}</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 align-middle">
-                      {editing ? (
-                        <input type="number" min={0} value={editData.weeklyTargetMinutes} onChange={e=>setEditData(d=>({...d,weeklyTargetMinutes:Number(e.target.value)}))} className="w-24 border rounded px-2 py-1 text-xs dark:bg-gray-950 dark:border-gray-700" />
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-[10px] font-medium">{unit==='min' ? fmtMinutes(it.weeklyTargetMinutes) : fmtHoursMinutes(it.weeklyTargetMinutes)}</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 align-middle text-right">
-                      <div className="inline-flex items-center gap-2">
-                        {editing ? (
-                          <>
-                            <Button variant="primary" size="sm" onClick={()=>saveEdit(it.id)} leftIcon={<IconSave size={14} />}>Save</Button>
-                            <Button variant="ghost" size="sm" onClick={()=>setEditingId(null)} leftIcon={<IconClose size={14} />}>Cancel</Button>
-                          </>
-                        ) : (
-                          <>
-                            <Button variant="secondary" size="sm" onClick={()=>startEdit(it)} leftIcon={<IconEdit size={14} />}>Edit</Button>
-                            <Button variant={pendingDeleteId===it.id? 'danger':'ghost'} size="sm" onClick={()=>remove(it.id)} leftIcon={<IconTrash size={14} />}>{pendingDeleteId===it.id? 'Confirm' : 'Delete'}</Button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {filteredItems.length === 0 && !loading && (
-                <tr>
-                  <td colSpan={4} className="text-center py-8 text-gray-500 dark:text-gray-400 text-xs">No activities yet.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </div>
-  );
+        </fieldset>
+        {formError && <ErrorState message={formError} />}
+        <div className="flex justify-end gap-3 pt-2"><Button variant="ghost" disabled={saving} onClick={() => setEditing(null)}>Cancel</Button><Button type="submit" loading={saving}>{editing === 'new' ? 'Create activity' : 'Save changes'}</Button></div>
+      </form>
+    </Dialog>
+    <Dialog open={!!deleting} onClose={() => setDeleting(null)} title="Delete this activity?" busy={saving}>
+      <p className="tt-text-muted mb-5"><strong className="text-slate-900 dark:text-white">{deleting?.name}</strong> will be removed. Existing time logs will be kept without an assigned activity.</p>
+      {formError && <ErrorState message={formError} />}
+      <div className="mt-5 flex justify-end gap-3"><Button variant="secondary" disabled={saving} onClick={() => setDeleting(null)}>Keep activity</Button><Button variant="danger" loading={saving} onClick={remove}>Delete activity</Button></div>
+    </Dialog>
+  </div>;
 }
+

@@ -1,283 +1,98 @@
 "use client";
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Button } from './ui/Button';
-import { IconCalendar } from './ui/icons';
+import { useSession } from 'next-auth/react';
+import { useSearchParams } from 'next/navigation';
 import { useApiClient } from './useApiClient';
-import { useRouter, useSearchParams } from 'next/navigation';
 import { useUnit } from './UnitProvider';
-import { fmtMinutes, fmtHoursMinutes } from '../lib/time';
-import { StartActivityModal } from './activities/StartActivityModal';
-import { useToast } from './toast/ToastProvider';
+import { useWeek } from './week/WeekContext';
+import { fmtMinutes, fmtHoursMinutes, mondayOf } from '../lib/time';
+import { CurrentActivityBar } from './CurrentActivityBar';
+import { Button, buttonStyles, IconButton } from './ui/Button';
+import { EmptyState, ErrorState, LoadingState } from './ui/Feedback';
+import { UnitSwitch } from './ui/UnitSwitch';
+import { IconAdd, IconCalendar, IconChevronLeft, IconChevronRight } from './ui/icons';
 
 interface ActivityStat {
-  id: string;
-  name: string;
-  color: string | null;
-  target: number;
-  plannedMinutesWeek: number;
-  done: number;
-  remaining: number;
-  over: number;
-  percent: number | null;
-  plannedCoveragePercent: number | null;
-  plannedRemaining: number;
-  loggedBySource: Record<string, number>;
-  loggedPartialMinutes: number;
-  loggedFullMinutes: number;
+  id:string; name:string; color:string | null; target:number; plannedMinutesWeek:number;
+  done:number; remaining:number; over:number; percent:number | null; plannedCoveragePercent:number | null;
 }
-
-interface DashboardResponse {
-  weekStart: string;
-  weekEndExclusive: string;
-  activities: ActivityStat[];
-}
-
-interface CurrentActivityResp { active: null | { id: string; startedAt: string; elapsedMinutes: number; activity: { id: string; name: string; color: string | null } | null }; }
-
+interface DashboardResponse { activities:ActivityStat[]; weekStart:string; weekEndExclusive:string; }
 export function DashboardWeekly() {
+  const { apiFetch } = useApiClient();
+  const { data:session } = useSession();
+  const { unit, setUnit } = useUnit();
+  const { weekStart, setWeekStart, gotoPrevWeek, gotoNextWeek, gotoThisWeek, weekRangeLabel } = useWeek();
+  const searchParams = useSearchParams();
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>('');
-  const { apiFetch } = useApiClient();
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { unit, setUnit } = useUnit();
-  const [current, setCurrent] = useState<CurrentActivityResp['active']>(null);
-  const [tick, setTick] = useState(0);
-  const [startOpen, setStartOpen] = useState(false);
-  const { addToast } = useToast();
-
-  function toDateStr(d: Date) {
-    return d.toISOString().substring(0,10);
-  }
-  function startOfWeek(date: Date) { // Monday
-    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-    const day = d.getUTCDay();
-    const diff = (day === 0 ? -6 : 1 - day);
-    d.setUTCDate(d.getUTCDate()+diff);
-    d.setUTCHours(0,0,0,0);
-    return d;
-  }
-  const todayWeekStart = toDateStr(startOfWeek(new Date()));
-  const [weekStart, setWeekStart] = useState<string>(() => {
-    const param = searchParams?.get('weekStart');
-    if (param && !isNaN(new Date(param).getTime())) return param;
-    return todayWeekStart;
-  });
-  // If URL has unit, override provider once; otherwise keep provider's choice
-  useEffect(()=>{
-    const qp = searchParams?.get('unit');
-    if(qp === 'min' || qp === 'hr') setUnit(qp);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function goToWeek(newWeekStart: string) {
-    setWeekStart(newWeekStart);
-    // Keep URL in sync without adding history entries
-    const sp = new URLSearchParams(Array.from(searchParams?.entries?.() || []));
-    sp.set('weekStart', newWeekStart);
-    router.replace(`?${sp.toString()}`);
-  }
-  function addDays(dateStr: string, days: number) {
-    const d = new Date(dateStr);
-    d.setUTCDate(d.getUTCDate() + days);
-    return toDateStr(d);
-  }
-  const prevWeek = () => goToWeek(addDays(weekStart, -7));
-  const nextWeek = () => goToWeek(addDays(weekStart, 7));
-  const goToday = () => goToWeek(todayWeekStart);
-  const nextIsFuture = addDays(weekStart, 7) > todayWeekStart; // simple string compare ok for YYYY-MM-DD
-
-  const fmt = useMemo(()=> (m: number) => (unit === 'min' ? fmtMinutes(m) : fmtHoursMinutes(m)), [unit]);
-  function setUnitAndSync(newUnit: 'min'|'hr'){
-    setUnit(newUnit);
-    const sp = new URLSearchParams(Array.from(searchParams?.entries?.() || []));
-    sp.set('unit', newUnit);
-    router.replace(`?${sp.toString()}`);
-  }
-
+  const [error, setError] = useState('');
+  const [refresh, setRefresh] = useState(0);
   useEffect(() => {
-    let aborted = false;
-    (async () => {
-      try {
-        setLoading(true);
-        const url = weekStart ? `/api/dashboard?weekStart=${encodeURIComponent(weekStart)}` : '/api/dashboard';
-        const resp = await apiFetch<DashboardResponse>(url);
-        if (!aborted) {
-          if (resp.ok && resp.data) {
-            setData(resp.data);
-            setError('');
-          } else if (!resp.ok) {
-            // If 401, apiFetch already triggered signOut; still surface a short error locally
-            setError(resp.error || 'Failed to load dashboard');
-          }
-        }
-      } catch (e:any) {
-        if (!aborted) setError(e.message || 'Failed to load dashboard');
-      } finally {
-        if (!aborted) setLoading(false);
-      }
-    })();
-    return () => { aborted = true; };
-  }, [weekStart, apiFetch]);
-
-  // Poll current activity once and then tick elapsed every 30s
-  useEffect(()=>{
-    let mounted = true;
-    (async()=>{
-      const resp = await apiFetch<CurrentActivityResp>('/api/logs/current');
-      if(mounted && resp.ok && resp.data){ setCurrent(resp.data.active); }
-    })();
-    const id = setInterval(()=> setTick(t=>t+1), 30000);
-    return ()=>{ mounted=false; clearInterval(id); };
-  }, [apiFetch]);
-
-  async function startActivity(activityId?: string){
-    const now = new Date();
-    const pad = (n:number)=> n.toString().padStart(2,'0');
-    const clientDate = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
-    const resp = await apiFetch<{ log: any }>('/api/logs/start', { method:'POST', json: { activityId: activityId || null, clientNow: now.toISOString(), clientDate } });
-    if(resp.ok && resp.data){
-      const log = (resp.data as any).log;
-      setCurrent({ id: log.id, startedAt: log.startedAt, elapsedMinutes: 0, activity: log.activity || null });
-      setStartOpen(false);
-      addToast({ type:'success', message:'Started activity' });
-    } else if(resp.status === 409){
-      addToast({ type:'info', message: 'There is already an active activity' });
-    } else if(!resp.ok){
-      addToast({ type:'error', message: resp.error || 'Failed to start' });
-    }
-  }
-  async function terminateCurrent(){
-    const resp = await apiFetch<{ log: any }>('/api/logs/terminate', { method:'POST' });
-    if(resp.ok){ setCurrent(null); addToast({ type:'success', message:'Stopped activity' }); } else if(resp.status===409){ addToast({ type:'info', message:'No active activity' }); } else { addToast({ type:'error', message: resp.error || 'Failed to stop' }); }
-  }
-
-  if (loading) return <p>Loading dashboard...</p>;
-  if (error) return <p className="text-red-600">{error}</p>;
-  if (!data) return null;
-
-  return (
-    <div className="space-y-6">
-      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 tt-panel tt-panel-padding">
-        <div>
-          <h2 className="tt-heading-page mb-1">Weekly Dashboard</h2>
-          <p className="text-xs tt-text-muted">Week {data.weekStart} to {data.weekEndExclusive}</p>
+    const requested = searchParams.get('weekStart');
+    if (requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) && !isNaN(Date.parse(requested))) setWeekStart(mondayOf(requested));
+    const requestedUnit = searchParams.get('unit');
+    if (requestedUnit === 'hr' || requestedUnit === 'min') setUnit(requestedUnit);
+  }, [searchParams, setWeekStart, setUnit]);
+  useEffect(() => {
+    let active = true;
+    setLoading(true); setError('');
+    apiFetch<DashboardResponse>('/api/dashboard?weekStart=' + weekStart).then(response => {
+      if (!active) return;
+      if (response.ok) setData(response.data); else setError(response.error || 'Your weekly overview could not be loaded.');
+      setLoading(false);
+    });
+    return () => { active = false; };
+  }, [apiFetch, weekStart, refresh]);
+  const reload = useCallback(() => setRefresh(v => v+1), []);
+  useEffect(() => { window.addEventListener('timelog:created', reload); return () => window.removeEventListener('timelog:created', reload); }, [reload]);
+  const fmt = unit === 'min' ? fmtMinutes : fmtHoursMinutes;
+  const activities = data?.activities || [];
+  const total = activities.reduce((sum, a) => sum+a.done, 0);
+  const planned = activities.reduce((sum, a) => sum+a.plannedMinutesWeek, 0);
+  const goals = activities.filter(a => a.target > 0);
+  const completed = goals.filter(a => a.done >= a.target).length;
+  const name = session?.user?.name?.split(' ')[0];
+  return <div className="space-y-7">
+    <header className="tt-page-header">
+      <div><p className="tt-eyebrow mb-2">Your time, with intention</p><h1 className="tt-heading-page">{name ? 'Welcome back, ' + name : 'Your weekly overview'}</h1><p className="tt-text-muted mt-2">A little focus today. A clearer picture of your week.</p></div>
+      <Link href="/logs" className={buttonStyles('secondary')}><IconAdd size={18} />Add time manually</Link>
+    </header>
+    <CurrentActivityBar />
+    <section aria-labelledby="week-title" className="space-y-5">
+      <div className="tt-page-header">
+        <div><h2 id="week-title" className="text-lg font-semibold">Your week at a glance</h2><p className="tt-text-muted text-sm">{weekRangeLabel}</p></div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div role="group" aria-label="Choose a week" className="flex items-center gap-1">
+            <IconButton icon={<IconChevronLeft size={18} />} label="Previous week" variant="ghost" onClick={gotoPrevWeek} />
+            <Button variant="secondary" onClick={gotoThisWeek}>This week</Button>
+            <IconButton icon={<IconChevronRight size={18} />} label="Next week" variant="ghost" onClick={gotoNextWeek} />
+          </div><UnitSwitch />
         </div>
-        {/* Mobile-only horizontal scroller for action buttons */}
-        <div className="self-start sm:self-auto w-full sm:w-auto">
-          <div className="flex items-center gap-2 overflow-x-auto sm:overflow-visible [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <div className="flex items-center gap-1 flex-nowrap">
-              <Button className="shrink-0" size="sm" variant="ghost" onClick={prevWeek} aria-label="Previous week">◀ Prev</Button>
-              <Button className="shrink-0" size="sm" variant="ghost" onClick={goToday} aria-label="Current week">Today</Button>
-              <Button className="shrink-0" size="sm" variant="ghost" onClick={nextWeek} aria-label="Next week" disabled={nextIsFuture}>Next ▶</Button>
-            </div>
-            <div className="flex items-center gap-1 flex-nowrap" aria-label="Units switch">
-              <Button className="shrink-0" size="sm" variant={unit==='min' ? 'primary' : 'ghost'} onClick={()=>setUnitAndSync('min')}>Min</Button>
-              <Button className="shrink-0" size="sm" variant={unit==='hr' ? 'primary' : 'ghost'} onClick={()=>setUnitAndSync('hr')}>Hours</Button>
-            </div>
-            <Link href="/schedule" aria-label="Go to weekly schedule" className="group shrink-0">
-              <Button asChild variant="primary" size="sm" leftIcon={<IconCalendar size={14} />}>Go to schedule</Button>
-            </Link>
-          </div>
+      </div>
+      {error ? <ErrorState message={error} onRetry={reload} /> : loading ? <LoadingState label="Loading your weekly progress…" /> : !activities.length ?
+        <EmptyState title="Make room for what matters" description="Start with an activity: work, studying, exercise, or anything you want to spend time on. A weekly goal is optional.">
+          <Link href="/activities" className={buttonStyles()}><IconAdd size={18} />Create your first activity</Link>
+        </EmptyState> : <>
+        <div className="grid gap-4 sm:grid-cols-3">
+          {[{ label:'Time on your activities', value:fmt(total), help:'Saved time this week' }, { label:'Time planned', value:fmt(planned), help:'In your weekly schedule' }, { label:'Weekly goals reached', value:goals.length ? completed + ' / ' + goals.length : 'No goals yet', help:goals.length ? 'Progress at your own pace' : 'Set an optional goal in Activities' }].map(stat =>
+            <div key={stat.label} className="tt-panel tt-panel-padding"><p className="tt-text-muted text-sm">{stat.label}</p><p className="my-2 text-3xl font-semibold tracking-tight">{stat.value}</p><p className="tt-text-muted text-xs">{stat.help}</p></div>)}
         </div>
-      </header>
-      {/* Current Activity card */}
-      <div className="tt-panel tt-panel-padding flex items-center justify-between gap-3">
-        {current ? (
-          <>
-            <div className="flex items-center gap-2">
-              <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: current.activity?.color || '#999' }} />
-              <div className="leading-tight">
-                <div className="font-medium">Current: {current.activity?.name || 'Unassigned'}</div>
-                {(() => {
-                  const started = new Date(current.startedAt);
-                  const mins = Math.max(0, Math.round((Date.now() - started.getTime())/60000));
-                  return (
-                    <div className="text-xs tt-text-muted">Started at {started.toLocaleTimeString()} • Elapsed ~ {unit==='min' ? `${mins} min` : fmtHoursMinutes(mins)}</div>
-                  );
-                })()}
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button size="sm" variant="danger" onClick={terminateCurrent}>Terminate</Button>
-            </div>
-          </>
-        ) : (
-          <div className="w-full flex items-center justify-between gap-2">
-            <span className="text-sm tt-text-muted">No activity in progress</span>
-            <div className="flex gap-2">
-              <Button size="sm" variant="ghost" onClick={()=>setStartOpen(true)}>Pick…</Button>
-              <Link href="/activities"><Button size="sm" variant="primary">Manage activities</Button></Link>
-            </div>
-          </div>
-        )}
-      </div>
-  <StartActivityModal open={startOpen} onClose={()=>setStartOpen(false)} onStart={startActivity} />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {data.activities.map(a => {
-          const pct = a.percent ?? 0;
-          const coverage = a.plannedCoveragePercent ?? 0;
-          const planned = a.plannedMinutesWeek;
-          const remainingLabel = fmt(a.remaining);
-          const plannedRemainingLabel = fmt(a.plannedRemaining);
-          const targetLabel = fmt(a.target);
-          const sources = Object.entries(a.loggedBySource).sort((x,y)=>y[1]-x[1]);
-          return (
-            <div key={a.id} className="tt-panel tt-panel-padding flex flex-col">
-              <div className="flex items-center justify-between mb-1">
-                <h3 className="font-medium flex items-center gap-2">
-                  <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: a.color || '#999' }} />
-                  {a.name}
-                </h3>
-                <span className="text-xs tt-text-muted">
-                  {fmt(a.done)} / {targetLabel}
-                  {a.over>0 && (
-                    <strong className="text-red-600 ml-1">+{fmt(a.over)}</strong>
-                  )}
-                </span>
-              </div>
-              <div className="text-[11px] text-gray-600 mb-2 flex flex-wrap gap-3">
-                <span>Remaining target: <strong>{remainingLabel}</strong></span>
-                <span>Remaining horary: <strong>{plannedRemainingLabel}</strong></span>
-              </div>
-              <div className="space-y-2 mt-1 flex-1">
-                {/* Target progress bar */}
-                <div>
-                  <div className="h-2 w-full bg-gray-200 rounded overflow-hidden">
-                    <div className="h-full bg-blue-600" style={{ width: `${Math.min(100,pct)}%` }} />
-                  </div>
-                  <div className="flex justify-between text-[10px] text-gray-600 mt-1">
-                    <span>Target {targetLabel}</span>
-                    <span>{pct.toFixed(1)}%</span>
-                  </div>
-                </div>
-                {/* Planned coverage bar */}
-                <div>
-                  <div className="h-2 w-full bg-gray-200 rounded overflow-hidden">
-                    <div className="h-full bg-emerald-600" style={{ width: `${Math.min(100,coverage)}%` }} />
-                  </div>
-                  <div className="flex justify-between text-[10px] text-gray-600 mt-1">
-                    <span>Planned {fmt(planned)}</span>
-                    <span>{coverage.toFixed(1)}%</span>
-                  </div>
-                </div>
-                {/* Sources breakdown */}
-                {sources.length > 0 && (
-                  <div className="text-[11px] flex flex-wrap gap-1">
-                    {sources.map(([k,v]) => (
-                      <span key={k} className="tt-badge" data-size="sm">{k}: {fmt(v)}</span>
-                    ))}
-                    <span className="tt-badge" data-size="sm" data-variant="amber">Partial {fmt(a.loggedPartialMinutes)}</span>
-                    <span className="tt-badge" data-size="sm" data-variant="green">Full {fmt(a.loggedFullMinutes)}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+        <div className="flex items-center justify-between gap-3 pt-2"><h3 className="text-lg font-semibold">Activity progress</h3><Link href="/activities" className="tt-link text-sm">Manage activities</Link></div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {activities.map(activity => <article key={activity.id} className="tt-panel tt-panel-padding">
+            <div className="flex items-start justify-between gap-4"><h4 className="flex min-w-0 items-center gap-2.5 font-semibold"><span aria-hidden="true" className="h-3 w-3 shrink-0 rounded-full" style={{ background:activity.color || '#6366f1' }} />{activity.name}</h4><span className="shrink-0 text-lg font-semibold tabular-nums">{fmt(activity.done)}</span></div>
+            {activity.target > 0 ? <div className="mt-5">
+              <div className="mb-2 flex justify-between gap-3 text-sm"><span className="tt-text-muted">Weekly goal · {fmt(activity.target)}</span><span className="font-medium">{Math.round(activity.percent || 0)}%</span></div>
+              <div role="progressbar" aria-label={activity.name + ' weekly goal'} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, Math.round(activity.percent || 0))} aria-valuetext={fmt(activity.done) + ' of ' + fmt(activity.target)} className="h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700"><div className="h-full rounded-full bg-indigo-500" style={{ width:Math.min(100, activity.percent || 0) + '%' }} /></div>
+              <p className="tt-text-muted mt-3 text-sm">{activity.remaining > 0 ? fmt(activity.remaining) + ' to reach your goal' : 'Goal reached. Nice work!'}</p>
+            </div> : <p className="tt-text-muted mt-4 text-sm">No weekly goal. Every bit of time counts.</p>}
+            {activity.plannedMinutesWeek > 0 && <p className="tt-text-muted mt-4 border-t border-slate-200 pt-3 text-xs dark:border-slate-700">{fmt(activity.plannedMinutesWeek)} planned in your schedule</p>}
+          </article>)}
+        </div>
+      </>}
+    </section>
+    <Link href="/schedule" className="tt-panel flex flex-wrap items-center gap-4 p-5 hover:border-indigo-400"><IconCalendar size={24} /><div className="flex-1"><p className="font-semibold">Make a little space for your priorities</p><p className="tt-text-muted text-sm">Plan your week with a simple, flexible schedule.</p></div><IconChevronRight size={20} /></Link>
+  </div>;
 }
+
