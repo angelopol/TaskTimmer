@@ -16,6 +16,10 @@ export function PWARegister() {
           });
         });
       }).catch(() => {});
+    } else if ('serviceWorker' in navigator) {
+      // Development: drop any worker left over from a production run so it cannot serve stale code.
+      navigator.serviceWorker.getRegistrations().then(list => list.forEach(registration => registration.unregister())).catch(() => {});
+      if ('caches' in window) caches.keys().then(keys => keys.forEach(key => caches.delete(key))).catch(() => {});
     }
     return () => { window.removeEventListener('online', sync); window.removeEventListener('offline', sync); };
   }, []);

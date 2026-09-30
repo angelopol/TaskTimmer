@@ -1,5 +1,5 @@
 /* Basic service worker for TaskTimmer */
-const CACHE_VERSION = 'v5';
+const CACHE_VERSION = 'v6';
 const PRECACHE = `precache-${CACHE_VERSION}`;
 const RUNTIME = `runtime-${CACHE_VERSION}`;
 
@@ -39,17 +39,25 @@ self.addEventListener('fetch', event => {
       );
       return;
     }
-    // Cache-first for static assets
-    if (/\.(?:js|css|png|svg|ico|jpg|jpeg|gif|webp|woff2?)$/i.test(url.pathname)) {
+    // Cache-first only for Next's content-hashed build files: a new deploy means new URLs.
+    // (Dev-server chunks keep the same URL between edits, so they must never be served from cache.)
+    const local = ['localhost', '127.0.0.1'].includes(self.location.hostname);
+    if (!local && url.pathname.startsWith('/_next/static/')) {
       event.respondWith(
-        caches.match(request).then(cached => {
-          if (cached) return cached;
-          return fetch(request).then(resp => {
-            const copy = resp.clone();
-            caches.open(RUNTIME).then(cache => cache.put(request, copy));
-            return resp;
-          });
-        })
+        caches.match(request).then(cached => cached || fetch(request).then(resp => {
+          if (resp.ok) { const copy = resp.clone(); caches.open(RUNTIME).then(cache => cache.put(request, copy)); }
+          return resp;
+        }))
+      );
+      return;
+    }
+    // Network-first for other static files (icons, manifest…), cache only as offline fallback.
+    if (/\.(?:js|css|png|svg|ico|jpg|jpeg|gif|webp|woff2?|webmanifest)$/i.test(url.pathname)) {
+      event.respondWith(
+        fetch(request).then(resp => {
+          if (resp.ok) { const copy = resp.clone(); caches.open(RUNTIME).then(cache => cache.put(request, copy)); }
+          return resp;
+        }).catch(() => caches.match(request))
       );
       return;
     }

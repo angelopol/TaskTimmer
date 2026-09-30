@@ -71,7 +71,7 @@ export default function ShortcutGuide() {
 
   const shortcutSteps: Step[] = [
     { id:'token', title:'Get your token', body: token
-      ? <div className="space-y-3"><p className="tt-badge" data-variant="amber">Shown only while this page is open. It is already filled in below.</p><CopyField label="Token" value={token} /></div>
+      ? <CopyField label="Token" value={token} />
       : <div className="space-y-2">
           <p>{status?.connected ? <>You already have a token (<code className="font-mono">{status.prefix}-…</code>). If it is not in your Shortcut yet, create a new one; the old one stops working.</> : 'Create the token your Shortcut will use to send reminders.'}</p>
           <Button loading={issuing} onClick={issue}>{status?.connected ? 'Create new token' : 'Create token'}</Button>
@@ -110,7 +110,7 @@ export default function ShortcutGuide() {
         <li>Headers → Add: <CopyChip value="Authorization" /> = <CopyChip value={bearer} label="Authorization value" /></li>
         <li>Request Body: <strong>JSON</strong> → add a <strong>Text</strong> field <CopyChip value="reminders" /> = <em>Combined Text</em></li>
       </ul>
-      {!token && <p className="tt-badge mt-2" data-variant="amber">Replace YOUR-TOKEN with the token from step 1.</p>}
+      {!token && <p className="tt-badge mt-2 !whitespace-normal !rounded-xl" data-variant="amber">Replace YOUR-TOKEN with the token from step 1.</p>}
     </> },
     { id:'run', title:'Run it once', body: <>
       <p>Tap ▶︎. Allow access to <strong>Reminders</strong>, and when asked about sending data to this site choose <strong>Always Allow</strong>, or the daily automation will stop to ask.</p>
@@ -151,7 +151,7 @@ export default function ShortcutGuide() {
           {label} <span className="tt-text-muted ml-1 text-xs tabular-nums">{count(list)}/{list.length}</span>
         </button>)}
     </div>
-    {part === 'automation' && !shortcutComplete && <p className="tt-badge" data-variant="amber">Finish part 1 first: the automation runs that Shortcut.</p>}
+    {part === 'automation' && !shortcutComplete && <p className="tt-badge !whitespace-normal !rounded-xl" data-variant="amber">Finish part 1 first: the automation runs that Shortcut.</p>}
     <ol className="space-y-2" role="tabpanel">
       {steps.map((step, index) => {
         const checked = !!done[step.id];
