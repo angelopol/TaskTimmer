@@ -1,17 +1,17 @@
 "use client";
 import React from 'react';
 import Link from 'next/link';
-import { IconClock, IconCalendar, IconLog } from '../ui/icons';
+import { IconClock, IconCalendar, IconLog, IconMoon, IconSun } from '../ui/icons';
 import { useTheme } from '../ThemeProvider';
-import { Button } from '../ui/Button';
+import { IconButton } from '../ui/Button';
 export function AuthLayout({ children, title, subtitle }: { children:React.ReactNode; title:string; subtitle?:string }) {
   const { theme, toggle } = useTheme();
   return <div className="mx-auto max-w-5xl pb-8">
-    <header className="flex items-center justify-between gap-3 py-3">
-      <Link href="/" className="inline-flex items-center gap-2.5 text-lg font-bold tracking-tight"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white"><IconClock size={23} /></span>TaskTimmer</Link>
-      <Button variant="ghost" onClick={toggle} aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}>{theme === 'dark' ? 'Light theme' : 'Dark theme'}</Button>
+    <header className="flex items-center justify-between gap-3 pb-3 pt-[calc(12px+var(--safe-top))]">
+      <Link href="/" className="inline-flex items-center gap-2.5 text-lg font-bold tracking-tight"><span className="flex h-10 w-10 items-center justify-center rounded-[11px] bg-indigo-600 text-white shadow-sm shadow-indigo-600/30"><IconClock size={23} /></span>TaskTimmer</Link>
+      <IconButton variant="ghost" onClick={toggle} label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} icon={theme === 'dark' ? <IconSun size={20} /> : <IconMoon size={20} />} />
     </header>
-    <div className="grid items-center gap-10 py-10 lg:grid-cols-2 lg:gap-20 lg:py-20">
+    <div className="grid items-center gap-10 py-6 sm:py-10 lg:grid-cols-2 lg:gap-20 lg:py-20">
       <section className="hidden lg:block">
         <p className="tt-eyebrow mb-5">A little more intention</p>
         <h2 className="max-w-md text-5xl font-bold leading-[1.12] tracking-tight">Make time for<br /><span className="text-indigo-600 dark:text-indigo-300">what matters.</span></h2>
@@ -22,10 +22,9 @@ export function AuthLayout({ children, title, subtitle }: { children:React.React
         </div>
       </section>
       <section className="mx-auto w-full max-w-md">
-        <div className="mb-7"><h1 className="tt-heading-page">{title}</h1>{subtitle && <p className="tt-text-muted mt-3">{subtitle}</p>}</div>
+        <div className="mb-5"><h1 className="tt-heading-page">{title}</h1>{subtitle && <p className="tt-text-muted mt-3">{subtitle}</p>}</div>
         {children}
-        <p className="tt-text-muted mt-6 text-center text-xs">Your pace. Your priorities. Your time.</p>
-      </section>
+              </section>
     </div>
   </div>;
 }

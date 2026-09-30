@@ -8,10 +8,12 @@ import { useUnit } from './UnitProvider';
 import { useWeek } from './week/WeekContext';
 import { fmtMinutes, fmtHoursMinutes, mondayOf } from '../lib/time';
 import { CurrentActivityBar } from './CurrentActivityBar';
-import { Button, buttonStyles, IconButton } from './ui/Button';
+import { buttonStyles } from './ui/Button';
+import { ActionBar } from './ui/Menu';
+import { PageHeader } from './ui/PageHeader';
+import { WeekNav } from './week/WeekNav';
 import { EmptyState, ErrorState, LoadingState } from './ui/Feedback';
-import { UnitSwitch } from './ui/UnitSwitch';
-import { IconAdd, IconCalendar, IconChevronLeft, IconChevronRight } from './ui/icons';
+import { IconAdd, IconCalendar } from './ui/icons';
 
 interface ActivityStat {
   id:string; name:string; color:string | null; target:number; plannedMinutesWeek:number;
@@ -22,7 +24,7 @@ export function DashboardWeekly() {
   const { apiFetch } = useApiClient();
   const { data:session } = useSession();
   const { unit, setUnit } = useUnit();
-  const { weekStart, setWeekStart, gotoPrevWeek, gotoNextWeek, gotoThisWeek, weekRangeLabel } = useWeek();
+  const { weekStart, setWeekStart } = useWeek();
   const searchParams = useSearchParams();
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,7 +41,7 @@ export function DashboardWeekly() {
     setLoading(true); setError('');
     apiFetch<DashboardResponse>('/api/dashboard?weekStart=' + weekStart).then(response => {
       if (!active) return;
-      if (response.ok) setData(response.data); else setError(response.error || 'Your weekly overview could not be loaded.');
+      if (response.ok) setData(response.data); else setError(response.error || 'Could not load your week.');
       setLoading(false);
     });
     return () => { active = false; };
@@ -53,46 +55,52 @@ export function DashboardWeekly() {
   const goals = activities.filter(a => a.target > 0);
   const completed = goals.filter(a => a.done >= a.target).length;
   const name = session?.user?.name?.split(' ')[0];
-  return <div className="space-y-7">
-    <header className="tt-page-header">
-      <div><p className="tt-eyebrow mb-2">Your time, with intention</p><h1 className="tt-heading-page">{name ? 'Welcome back, ' + name : 'Your weekly overview'}</h1><p className="tt-text-muted mt-2">A little focus today. A clearer picture of your week.</p></div>
-      <Link href="/logs" className={buttonStyles('secondary')}><IconAdd size={18} />Add time manually</Link>
-    </header>
+  const stats = [
+    { label:'Tracked', value:fmt(total) },
+    { label:'Planned', value:fmt(planned) },
+    { label:'Goals met', value:goals.length ? completed + '/' + goals.length : '—' }
+  ];
+  return <div className="space-y-5">
+    <PageHeader title={name ? 'Hi, ' + name : 'Overview'} />
     <CurrentActivityBar />
-    <section aria-labelledby="week-title" className="space-y-5">
-      <div className="tt-page-header">
-        <div><h2 id="week-title" className="text-lg font-semibold">Your week at a glance</h2><p className="tt-text-muted text-sm">{weekRangeLabel}</p></div>
-        <div className="flex flex-wrap items-center gap-3">
-          <div role="group" aria-label="Choose a week" className="flex items-center gap-1">
-            <IconButton icon={<IconChevronLeft size={18} />} label="Previous week" variant="ghost" onClick={gotoPrevWeek} />
-            <Button variant="secondary" onClick={gotoThisWeek}>This week</Button>
-            <IconButton icon={<IconChevronRight size={18} />} label="Next week" variant="ghost" onClick={gotoNextWeek} />
-          </div><UnitSwitch />
-        </div>
+    <section aria-label="Your week" className="space-y-4">
+      <div className="flex items-center gap-2">
+        <WeekNav className="min-w-0 flex-1 sm:max-w-sm sm:flex-none" />
+        <ActionBar className="ml-auto" actions={[
+          { label:'Add time', icon:<IconAdd size={18} />, href:'/logs' },
+          { label:'Plan week', icon:<IconCalendar size={18} />, href:'/schedule' }
+        ]} />
       </div>
-      {error ? <ErrorState message={error} onRetry={reload} /> : loading ? <LoadingState label="Loading your weekly progress…" /> : !activities.length ?
-        <EmptyState title="Make room for what matters" description="Start with an activity: work, studying, exercise, or anything you want to spend time on. A weekly goal is optional.">
-          <Link href="/activities" className={buttonStyles()}><IconAdd size={18} />Create your first activity</Link>
+      {error ? <ErrorState message={error} onRetry={reload} /> : loading ? <LoadingState label="Loading your week…" /> : !activities.length ?
+        <EmptyState title="No activities yet">
+          <Link href="/activities" className={buttonStyles()}><IconAdd size={18} />Create an activity</Link>
         </EmptyState> : <>
-        <div className="grid gap-4 sm:grid-cols-3">
-          {[{ label:'Time on your activities', value:fmt(total), help:'Saved time this week' }, { label:'Time planned', value:fmt(planned), help:'In your weekly schedule' }, { label:'Weekly goals reached', value:goals.length ? completed + ' / ' + goals.length : 'No goals yet', help:goals.length ? 'Progress at your own pace' : 'Set an optional goal in Activities' }].map(stat =>
-            <div key={stat.label} className="tt-panel tt-panel-padding"><p className="tt-text-muted text-sm">{stat.label}</p><p className="my-2 text-3xl font-semibold tracking-tight">{stat.value}</p><p className="tt-text-muted text-xs">{stat.help}</p></div>)}
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          {stats.map(stat => <div key={stat.label} className="tt-panel px-3 py-3 sm:px-5 sm:py-4">
+            <p className="tt-text-muted truncate text-xs font-medium sm:text-sm">{stat.label}</p>
+            <p className="mt-0.5 truncate text-lg font-semibold tracking-tight tabular-nums sm:text-2xl">{stat.value}</p>
+          </div>)}
         </div>
-        <div className="flex items-center justify-between gap-3 pt-2"><h3 className="text-lg font-semibold">Activity progress</h3><Link href="/activities" className="tt-link text-sm">Manage activities</Link></div>
-        <div className="grid gap-4 md:grid-cols-2">
-          {activities.map(activity => <article key={activity.id} className="tt-panel tt-panel-padding">
-            <div className="flex items-start justify-between gap-4"><h4 className="flex min-w-0 items-center gap-2.5 font-semibold"><span aria-hidden="true" className="h-3 w-3 shrink-0 rounded-full" style={{ background:activity.color || '#6366f1' }} />{activity.name}</h4><span className="shrink-0 text-lg font-semibold tabular-nums">{fmt(activity.done)}</span></div>
-            {activity.target > 0 ? <div className="mt-5">
-              <div className="mb-2 flex justify-between gap-3 text-sm"><span className="tt-text-muted">Weekly goal · {fmt(activity.target)}</span><span className="font-medium">{Math.round(activity.percent || 0)}%</span></div>
-              <div role="progressbar" aria-label={activity.name + ' weekly goal'} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, Math.round(activity.percent || 0))} aria-valuetext={fmt(activity.done) + ' of ' + fmt(activity.target)} className="h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700"><div className="h-full rounded-full bg-indigo-500" style={{ width:Math.min(100, activity.percent || 0) + '%' }} /></div>
-              <p className="tt-text-muted mt-3 text-sm">{activity.remaining > 0 ? fmt(activity.remaining) + ' to reach your goal' : 'Goal reached. Nice work!'}</p>
-            </div> : <p className="tt-text-muted mt-4 text-sm">No weekly goal. Every bit of time counts.</p>}
-            {activity.plannedMinutesWeek > 0 && <p className="tt-text-muted mt-4 border-t border-slate-200 pt-3 text-xs dark:border-slate-700">{fmt(activity.plannedMinutesWeek)} planned in your schedule</p>}
-          </article>)}
-        </div>
+        <div className="flex items-center justify-between gap-3"><h2 className="tt-heading-section">Activities</h2><Link href="/activities" className="text-sm font-semibold text-indigo-600 dark:text-indigo-300">Manage</Link></div>
+        <ul className="tt-list">
+          {activities.map(activity => {
+            const percent = Math.min(100, Math.round(activity.percent || 0));
+            return <li key={activity.id} className="bg-[var(--surface)] px-4 py-3">
+              <div className="flex items-center gap-3">
+                <span aria-hidden="true" className="tt-dot" style={{ background:activity.color || '#6366f1' }} />
+                <h3 className="min-w-0 flex-1 truncate font-medium">{activity.name}</h3>
+                <span className="shrink-0 text-sm tabular-nums"><strong className="font-semibold">{fmt(activity.done)}</strong>{activity.target > 0 && <span className="tt-text-muted"> / {fmt(activity.target)}</span>}</span>
+              </div>
+              {activity.target > 0 && <div className="mt-2 flex items-center gap-3 pl-[22px]">
+                <div role="progressbar" aria-label={activity.name + ' weekly goal'} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-valuetext={fmt(activity.done) + ' of ' + fmt(activity.target)} className="tt-progress flex-1">
+                  <div style={{ width:percent + '%', background:activity.done >= activity.target ? '#16a34a' : activity.color || '#6366f1' }} />
+                </div>
+                <span className="tt-text-muted w-9 shrink-0 text-right text-xs tabular-nums">{percent}%</span>
+              </div>}
+            </li>;
+          })}
+        </ul>
       </>}
     </section>
-    <Link href="/schedule" className="tt-panel flex flex-wrap items-center gap-4 p-5 hover:border-indigo-400"><IconCalendar size={24} /><div className="flex-1"><p className="font-semibold">Make a little space for your priorities</p><p className="tt-text-muted text-sm">Plan your week with a simple, flexible schedule.</p></div><IconChevronRight size={20} /></Link>
   </div>;
 }
-

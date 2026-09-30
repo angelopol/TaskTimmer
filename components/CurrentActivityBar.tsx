@@ -4,7 +4,7 @@ import { useApiClient } from './useApiClient';
 import { StartActivityModal } from './activities/StartActivityModal';
 import { useToast } from './toast/ToastProvider';
 import { Button } from './ui/Button';
-import { IconClock } from './ui/icons';
+import { IconPlay, IconStop } from './ui/icons';
 import { ErrorState } from './ui/Feedback';
 
 interface Current { id:string; startedAt:string; activity:{ id:string; name:string; color:string | null } | null }
@@ -22,7 +22,7 @@ export function CurrentActivityBar() {
     const response = await apiFetch<{ active:Current | null }>('/api/logs/current');
     if (mutation.current) return;
     if (response.ok) { setCurrent(response.data?.active || null); setError(''); }
-    else setError('Your timer could not be checked. Try again before starting a new one.');
+    else setError('Could not check your timer.');
     setLoading(false);
   }, [apiFetch]);
   useEffect(() => {
@@ -44,9 +44,9 @@ export function CurrentActivityBar() {
     mutation.current = false; setBusy(false);
     if (response.ok && response.data) {
       setCurrent(response.data.log); setNow(Date.now()); setOpen(false); setError('');
-      addToast({ type:'success', message:'Timer started. You can leave this page and keep tracking.' });
+      addToast({ type:'success', message:'Timer started.' });
     } else {
-      addToast({ type:'error', message:response.status === 409 ? 'A timer is already running. We have refreshed its status.' : response.error || 'Could not start the timer.' });
+      addToast({ type:'error', message:response.status === 409 ? 'A timer is already running.' : response.error || 'Could not start the timer.' });
       refresh();
     }
   }
@@ -58,26 +58,28 @@ export function CurrentActivityBar() {
     if (response.ok) {
       setCurrent(null); setError('');
       window.dispatchEvent(new Event('timelog:created'));
-      addToast({ type:'success', message:'Timer stopped. Your time has been saved.' });
+      addToast({ type:'success', message:'Timer stopped and saved.' });
     } else { addToast({ type:'error', message:response.error || 'Could not stop the timer. Please try again.' }); refresh(); }
   }
   const seconds = current ? Math.max(0, Math.floor((now-new Date(current.startedAt).getTime())/1000)) : 0;
   const elapsed = [Math.floor(seconds/3600), Math.floor(seconds/60)%60, seconds%60].map(n => String(n).padStart(2,'0')).join(':');
-  return <section aria-label="Activity timer" className="space-y-3">
-    <div className={'tt-panel tt-panel-padding flex flex-wrap items-center gap-5 ' + (current ? '!border-indigo-300 dark:!border-indigo-700' : '')}>
-      <span className="tt-empty-icon !mb-0 shrink-0"><IconClock size={26} /></span>
+  const color = current?.activity?.color || '#6366f1';
+  return <section aria-label="Activity timer" className="space-y-2">
+    <div className={'tt-panel flex items-center gap-3 p-3 pl-4 ' + (current ? '!border-indigo-300 dark:!border-indigo-800' : '')}>
+      <span aria-hidden="true" className="relative flex h-3 w-3 shrink-0">
+        {current && <span className="absolute inset-0 animate-ping rounded-full opacity-60" style={{ background:color }} />}
+        <span className="relative h-3 w-3 rounded-full" style={{ background:current ? color : 'var(--line-strong)' }} />
+      </span>
       <div className="min-w-0 flex-1">
-        <p className="tt-eyebrow">{current ? 'Timer running' : 'One thing at a time'}</p>
-        <h2 className="mt-1 text-lg font-semibold">{loading ? 'Checking your timer…' : current ? current.activity?.name || 'Unassigned activity' : 'Ready when you are'}</h2>
-        <p className="tt-text-muted mt-1 text-sm">{current ? 'Your time is saved when you stop the timer.' : 'Choose an activity and focus. We will keep track of the time.'}</p>
+        <p className="truncate font-semibold">{loading ? 'Checking timer…' : current ? current.activity?.name || 'Unassigned' : 'No timer running'}</p>
+        {current && <p className="tt-text-muted font-mono text-sm tabular-nums" aria-label={'Elapsed time ' + elapsed}>{elapsed}</p>}
       </div>
-      {current && <span className="font-mono text-3xl font-medium tracking-tight tabular-nums" aria-label={'Elapsed time ' + elapsed}>{elapsed}</span>}
-      <Button size="md" className="w-full sm:w-auto" disabled={loading || !!error} loading={busy} onClick={current ? stop : () => setOpen(true)} variant={current ? 'secondary' : 'primary'}>
-        {current ? 'Stop & save' : 'Start timer'}
+      <Button size="md" className="!px-4" disabled={loading || !!error} loading={busy} onClick={current ? stop : () => setOpen(true)} variant={current ? 'secondary' : 'primary'}
+        leftIcon={current ? <IconStop size={16} /> : <IconPlay size={16} />}>
+        {current ? 'Stop' : 'Start'}
       </Button>
     </div>
     {error && <ErrorState message={error} onRetry={refresh} />}
     <StartActivityModal open={open} onClose={() => setOpen(false)} onStart={start} />
   </section>;
 }
-

@@ -2,14 +2,15 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { Dialog } from '../ui/Dialog';
 import { ErrorState, LoadingState, EmptyState } from '../ui/Feedback';
-import { UnitSwitch } from '../ui/UnitSwitch';
-import { Button, IconButton } from '../ui/Button';
-import { IconChevronLeft, IconChevronRight, IconEdit, IconSave, IconClose, IconTrash } from '../ui/icons';
-import { minutesToHHMM, WEEKDAY_NAMES_LONG, combineDateAndTime, fmtMinutes, fmtHoursMinutes } from '../../lib/time';
+import { Button } from '../ui/Button';
+import { Menu } from '../ui/Menu';
+import { DayPicker } from '../ui/DayPicker';
+import { IconAdd, IconCalendar, IconEdit, IconList, IconSegment, IconTrash } from '../ui/icons';
+import { minutesToHHMM, WEEKDAY_NAMES_LONG, WEEKDAY_NAMES_SHORT, combineDateAndTime, fmtMinutes, fmtHoursMinutes } from '../../lib/time';
 import { useWeek } from '../week/WeekContext';
 import { useToast } from '../toast/ToastProvider';
 import { useUnit } from '../UnitProvider';
-import { CurrentActivityBar } from '../CurrentActivityBar';
+import { WeekNav } from '../week/WeekNav';
 
 interface Activity { id: string; name: string; color: string | null; }
 interface Segment { id: string; weekday: number; startMinute: number; endMinute: number; activityId: string | null; activity?: Activity | null; }
@@ -26,8 +27,10 @@ type Source = typeof SOURCES[number];
 export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void }){
   const [view, setView] = useState<'agenda' | 'grid'>('agenda');
   const [retry, setRetry] = useState(0);
-  const { weekStart, gotoPrevWeek, gotoNextWeek, gotoThisWeek, weekRangeLabel } = useWeek();
-  const { unit, setUnit } = useUnit();
+  const { weekStart } = useWeek();
+  const { unit } = useUnit();
+  const [selectedDay, setSelectedDay] = useState(() => new Date().getDay() || 7);
+  const todayISO = (() => { const d = new Date(); return [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-'); })();
   const [segments, setSegments] = useState<Segment[]>([]);
   // Removed historical snapshot mode & fetch counters
   const lastLoadKeyRef = useRef<string>(''); // prevent duplicate loads for same key (weekStart|mode)
@@ -68,19 +71,6 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
   const [loadingFreeLogs, setLoadingFreeLogs] = useState(false);
   // Removed debug functionality (was ENABLE_DEBUG, debugAllowed, showDebug, debugInfo)
   const [includeEmptySegmentsAsFree, setIncludeEmptySegmentsAsFree] = useState(false);
-
-  // Compute readable text color (black/white) over a given hex background color
-  function pickTextColor(background?:string) {
-    const hex = (background || '#6b7280').replace('#','');
-    const full = hex.length === 3 ? hex.split('').map(c => c+c).join('') : hex;
-    if (!/^[0-9a-f]{6}$/i.test(full)) return '#000000';
-    const channels = [0,2,4].map(index => {
-      const value = parseInt(full.slice(index,index+2),16)/255;
-      return value <= .04045 ? value/12.92 : Math.pow((value+.055)/1.055,2.4);
-    });
-    const luminance = .2126*channels[0]+.7152*channels[1]+.0722*channels[2];
-    return luminance > .179 ? '#000000' : '#ffffff';
-  }
 
   // Restaurar preferencia toggle empty segments from localStorage
   useEffect(()=>{
@@ -441,9 +431,9 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
       // Validate times inside segment
       const startMin = parseInt(startHHMM.slice(0,2))*60 + parseInt(startHHMM.slice(3));
       const endMin = parseInt(endHHMM.slice(0,2))*60 + parseInt(endHHMM.slice(3));
-      if(endMin <= startMin) throw new Error('End must be after start');
+      if(endMin <= startMin) throw new Error('End must be after start.');
       if(startMin < selectedSegment.startMinute || endMin > selectedSegment.endMinute){
-        throw new Error('Time range must stay within bounds');
+        throw new Error('Time must stay within this block.');
       }
       const date = weekDateForWeekday(selectedSegment.weekday);
       const startedAt = combineDateAndTime(date, startHHMM);
@@ -466,7 +456,7 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
         window.dispatchEvent(new CustomEvent('timelog:created'));
       }
       setOpen(false); setSelectedSegment(null);
-  addToast({ message:'Created log', type:'success'});
+  addToast({ message:'Time added.', type:'success'});
       refreshSegmentUsage();
       // Reload modal logs after creation (if still open)
       if(open){
@@ -535,7 +525,7 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
       const startIdx = page * MODAL_LOGS_PAGE_SIZE;
       const pageItems = filtered.slice(startIdx, startIdx + MODAL_LOGS_PAGE_SIZE);
       setModalLogs(prev => replace ? pageItems : [...prev, ...pageItems]);
-  } catch(e:any){ setModalError(e.message); addToast({ type:'error', message: e.message || 'Failed to update log' }); }
+  } catch(e:any){ setModalError(e.message); addToast({ type:'error', message: e.message || 'Could not load entries.' }); }
     finally { setModalLogsLoading(false); }
   }
 
@@ -583,7 +573,7 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
         const newStartMin = timeStrToMinutes(editModalLogDraft.start);
         const newEndMin = timeStrToMinutes(editModalLogDraft.end);
         if(!( 'temp' in selectedSegment) && (newStartMin < selectedSegment.startMinute || newEndMin > selectedSegment.endMinute)){
-          throw new Error('This time is outside the scheduled block. Adjust the block in Edit routine, or edit the entry in Time log.');
+          throw new Error('This time is outside the block. Edit it in the Time log instead.');
         }
       }
       const body: any = {
@@ -606,8 +596,8 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
         // Refresh free logs regardless (covers free & segment edits impacting free cells)
         loadFreeLogs();
       }
-  addToast({ message: 'Updated log', type: 'success' });
-  } catch(e:any){ setModalError(e.message); addToast({ type:'error', message: e.message || 'Failed to delete log' }); }
+  addToast({ message: 'Entry updated.', type: 'success' });
+  } catch(e:any){ setModalError(e.message); addToast({ type:'error', message: e.message || 'Could not update the entry.' }); }
     finally { setModalLogSaving(false); }
   }
 
@@ -630,7 +620,7 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
       setModalLogs(curr => curr.filter(x=>x.id !== l.id));
       refreshSegmentUsage();
       loadFreeLogs();
-  addToast({ message: 'Deleted log', type: 'success' });
+  addToast({ message: 'Entry deleted.', type: 'success' });
     } catch(e:any){ setModalError(e.message); }
     finally { setModalLogSaving(false); }
   }
@@ -677,590 +667,315 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
     return { items, segStart, segEnd };
   }
 
-  // Mount node for portal modals
+  const fmt = (n:number) => unit === 'min' ? fmtMinutes(n) : fmtHoursMinutes(n);
+  const activityById = useMemo(() => Object.fromEntries(activities.map(a => [a.id, a])) as Record<string, Activity>, [activities]);
+  const sourceLabel: Record<Source, string> = { PLANNED:'Scheduled', ADHOC:'Unplanned', MAKEUP:'Catch-up' };
+  const weekDates = useMemo(() => [1,2,3,4,5,6,7].map(weekDateForWeekday), [weekStart]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  type ChipItem = { key:string; name:string; color:string | null; minutes:number };
+  function renderChips(items:ChipItem[], limit = 2){
+    if(!items.length) return null;
+    return <span className="flex min-w-0 flex-wrap gap-1">
+      {items.slice(0, limit).map(item => <span key={item.key} className="tt-chip" style={{ background:(item.color || '#94a3b8') + '26', color:'var(--ink)' }} title={item.name + ' · ' + fmt(item.minutes)}>
+        <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background:item.color || '#94a3b8' }} />
+        <span className="truncate">{item.name}</span><span className="opacity-70">{fmt(item.minutes)}</span>
+      </span>)}
+      {items.length > limit && <span className="tt-chip bg-[var(--surface-2)] text-[var(--muted)]" title={items.slice(limit).map(i => i.name + ' ' + fmt(i.minutes)).join(', ')}>+{items.length - limit}</span>}
+    </span>;
+  }
+
+  // Consecutive rows covered by the same segment (or by open time) are merged per day with rowSpan,
+  // so a block reads as one card instead of being sliced by other days' boundaries.
+  interface GridCell { row:number; span:number; seg:Segment | null; start:number; end:number; overlay?:FreeLogCellData; }
+  const gridColumns = useMemo(() => {
+    const result: Record<number, Record<number, GridCell>> = {};
+    for(let day=1; day<=7; day++){
+      const cells: GridCell[] = [];
+      effectiveRows.forEach((r, row) => {
+        const seg = byDay[day].find(s => s.startMinute <= r.start && s.endMinute >= r.end) || null;
+        const overlay = freeLogsMap[`${day}:${r.start}-${r.end}`];
+        const last = cells[cells.length-1];
+        if(last && (last.seg?.id ?? null) === (seg?.id ?? null) && last.end === r.start){
+          last.span++; last.end = r.end;
+          if(overlay){
+            const merged: FreeLogCellData = last.overlay ? { ...last.overlay, activities:last.overlay.activities.map(a => ({ ...a })) } : { totalMinutes:0, activities:[], dominantActivityId:null };
+            merged.totalMinutes += overlay.totalMinutes;
+            for(const a of overlay.activities){
+              const found = merged.activities.find(x => x.activityId === a.activityId);
+              if(found) found.minutes += a.minutes; else merged.activities.push({ ...a });
+            }
+            merged.activities.sort((a,b) => b.minutes - a.minutes);
+            merged.dominantActivityId = merged.activities[0]?.activityId || null;
+            last.overlay = merged;
+          }
+        } else cells.push({ row, span:1, seg, start:r.start, end:r.end, overlay });
+      });
+      result[day] = Object.fromEntries(cells.map(cell => [cell.row, cell]));
+    }
+    return result;
+  }, [effectiveRows, byDay, freeLogsMap]);
+
+  function renderGridCell(day:number, cell:GridCell){
+    const seg = cell.seg;
+    const label = `${minutesToHHMM(cell.start)}–${minutesToHHMM(cell.end)}`;
+    const overlayChips: ChipItem[] = (cell.overlay?.activities || []).map(a => ({ key:'o'+a.activityId, name:a.name, color:a.color, minutes:a.minutes }));
+    let body: React.ReactNode, style: React.CSSProperties | undefined, kind = 'free', name = 'Free';
+    if(seg){
+      kind = 'block';
+      const breakdown = segmentBreakdown[seg.id] || [];
+      const dom = segmentDominantActivity[seg.id];
+      const logged = segmentLoggedMinutes[seg.id] || 0;
+      const planned = seg.endMinute - seg.startMinute;
+      const color = seg.activity?.color || null;
+      const otherChips: ChipItem[] = breakdown.filter(b => b.activityId !== seg.activityId).map(b => {
+        const a = b.activityId ? activityById[b.activityId] : undefined;
+        return { key:'b'+(b.activityId || 'none'), name:a?.name || 'Unassigned', color:a?.color || null, minutes:b.minutes };
+      });
+      const replaced = !!(seg.activityId && dom?.activityId && dom.activityId !== seg.activityId);
+      name = seg.activity?.name || (dom?.activityId && activityById[dom.activityId]?.name) || 'Open block';
+      style = color ? { background:color + '1c', borderLeft:'3px solid ' + color } : { background:'var(--surface-2)', borderLeft:'3px dashed var(--line-strong)' };
+      body = <>
+        <span className={'tt-cell-name ' + (replaced ? 'line-through opacity-60' : '')}>{name}</span>
+        {seg.activityId && <span className={'tt-cell-meta ' + (usageUpdating ? 'opacity-60' : '')}>{hasLoadedUsage ? fmt(logged) + ' / ' + fmt(planned) : '…'}</span>}
+        {seg.activityId && hasLoadedUsage && <span className="tt-progress block !h-1 w-full"><span className="block h-full rounded-full" style={{ width:Math.min(100, Math.round(logged / planned * 100)) + '%', background:color || '#6366f1' }} /></span>}
+        {renderChips([...otherChips, ...overlayChips])}
+      </>;
+    } else {
+      body = <>
+        <span className="tt-cell-name font-medium">{overlayChips.length ? 'Free · ' + fmt(cell.overlay!.totalMinutes) : 'Free'}</span>
+        {renderChips(overlayChips)}
+      </>;
+    }
+    return <td key={day} rowSpan={cell.span} className={day === selectedDay ? '' : 'max-sm:hidden'}>
+      <button type="button" className="tt-cell" data-kind={kind} style={style}
+        onClick={() => seg ? openModal(seg) : openModal({ temp:true, weekday:day, startMinute:cell.start, endMinute:cell.end })}
+        aria-label={`${WEEKDAY_NAMES_LONG[day-1]}, ${label}, ${name}. Record time`}>
+        {body}
+      </button>
+    </td>;
+  }
+
+  function renderModalLog(l:any, range?:{ startMin:number; endMin:number }){
+    const st = new Date(l.startedAt); const et = new Date(l.endedAt);
+    const pad = (n:number)=> n.toString().padStart(2,'0');
+    const tm = (d:Date)=> `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const dur = l.minutes ?? Math.round((et.getTime()-st.getTime())/60000);
+    const rangeLabel = range ? `${minutesToHHMM(range.startMin)}–${minutesToHHMM(range.endMin)}` : `${tm(st)}–${tm(et)}`;
+    if(editingModalLogId === l.id && editModalLogDraft && selectedSegment){
+      const newStartMin = timeStrToMinutes(editModalLogDraft.start);
+      const newEndMin = timeStrToMinutes(editModalLogDraft.end);
+      const within = 'temp' in selectedSegment || (newStartMin >= selectedSegment.startMinute && newEndMin <= selectedSegment.endMinute);
+      const newDur = Math.max(0, newEndMin - newStartMin);
+      return <li key={l.id} className="space-y-3 bg-[var(--surface-2)] p-3">
+        <div className="grid grid-cols-2 gap-2">
+          <label><span className="tt-label">Start</span><input type="time" className="tt-input tt-input-sm" value={editModalLogDraft.start} onChange={e=> setEditModalLogDraft(d=> d? {...d, start: e.target.value }: d)} /></label>
+          <label><span className="tt-label">End</span><input type="time" className="tt-input tt-input-sm" value={editModalLogDraft.end} onChange={e=> setEditModalLogDraft(d=> d? {...d, end: e.target.value }: d)} /></label>
+          <label><span className="tt-label">Activity</span><select className="tt-input tt-input-sm" value={editModalLogDraft.activityId} onChange={e=> setEditModalLogDraft(d=> d? {...d, activityId: e.target.value }: d)}>
+            <option value="">No activity</option>{activities.map(a=> <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select></label>
+          <label><span className="tt-label">Type</span><select className="tt-input tt-input-sm" value={editModalLogDraft.source} onChange={e=> setEditModalLogDraft(d=> d? {...d, source: e.target.value as Source }: d)}>
+            {SOURCES.map(s=> <option key={s} value={s}>{sourceLabel[s]}</option>)}
+          </select></label>
+          <input type="text" aria-label="Note" placeholder="Note" className="tt-input tt-input-sm col-span-2" value={editModalLogDraft.comment} onChange={e=> setEditModalLogDraft(d=> d? {...d, comment: e.target.value }: d)} />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="tt-check !min-h-9"><input type="checkbox" checked={editModalLogDraft.partial} onChange={e=> setEditModalLogDraft(d=> d? {...d, partial: e.target.checked }: d)} />Partial</label>
+          <span className="tt-badge" data-variant={within ? 'blue' : 'red'}>{within ? fmt(newDur) : 'Outside this block'}</span>
+          <span className="ml-auto flex gap-2">
+            <Button variant="ghost" className="!min-h-9" disabled={modalLogSaving} onClick={cancelEditModalLog}>Cancel</Button>
+            <Button className="!min-h-9" loading={modalLogSaving} onClick={()=> saveModalLog(l)}>Save</Button>
+          </span>
+        </div>
+      </li>;
+    }
+    if(pendingDeleteLogId === l.id){
+      return <li key={l.id} className="flex items-center gap-2 bg-red-50 px-4 py-2 dark:bg-red-950/30">
+        <span className="min-w-0 flex-1 text-sm font-medium">Delete {rangeLabel}?</span>
+        <Button variant="ghost" className="!min-h-9" disabled={modalLogSaving} onClick={()=> setPendingDeleteLogId(null)}>Cancel</Button>
+        <Button variant="danger" className="!min-h-9" loading={modalLogSaving} onClick={()=> deleteModalLog(l)}>Delete</Button>
+      </li>;
+    }
+    return <li key={l.id} className="flex items-center gap-3 py-2 pl-4 pr-1">
+      <span aria-hidden="true" className="tt-dot" style={{ background:l.activity?.color || '#94a3b8' }} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium">{l.activity?.name || 'Unassigned'}</span>
+        <span className="tt-text-muted block truncate text-xs tabular-nums">{rangeLabel} · {fmt(dur)} · {sourceLabel[l.source as Source]}{l.partial ? ' · Partial' : ''}{l.comment ? ' · ' + l.comment : ''}</span>
+      </span>
+      <Menu label="Entry options" items={[
+        { label:'Edit', icon:<IconEdit size={17} />, disabled:modalLogSaving, onSelect:() => beginEditModalLog(l) },
+        { label:'Delete', icon:<IconTrash size={17} />, danger:true, disabled:modalLogSaving, onSelect:() => setPendingDeleteLogId(l.id) }
+      ]} />
+    </li>;
+  }
+
   const segmentModal = selectedSegment ? (
-    <Dialog open={open} onClose={closeModal} title="Record time in this block" description="Review saved entries or add time you have completed." busy={saving || modalLogSaving} wide>
-      <div className="schedule-workspace space-y-5">
-        <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
-          <div>Segment: {minutesToHHMM(selectedSegment.startMinute)} - {minutesToHHMM(selectedSegment.endMinute)}</div>
-          <div>Weekday: {WEEKDAY_NAMES_LONG[selectedSegment.weekday-1]}</div>
-          <div>Planned Activity: {'temp' in selectedSegment ? '—' : (selectedSegment.activity?.name || '—')}</div>
-        </div>
-        {/* Existing logs list */}
-        <div className="space-y-1">
+    <Dialog open={open} onClose={closeModal} busy={saving || modalLogSaving}
+      title={`${WEEKDAY_NAMES_SHORT[selectedSegment.weekday-1]} · ${minutesToHHMM(selectedSegment.startMinute)}–${minutesToHHMM(selectedSegment.endMinute)}`}
+      description={'temp' in selectedSegment ? 'Free time' : (selectedSegment.activity?.name || 'Open block')}>
+      <div className="space-y-5">
+        <section aria-label="Logged time" className="space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold flex items-center gap-2">Existing logs{('temp' in selectedSegment) ? ' (free interval)' : ''}
-              {!( 'temp' in selectedSegment) && (
-                (()=>{
-                  const threshold = Number(MIN_GAP_MINUTES);
-                  const plural = threshold === 1 ? '' : 's';
-                  return (
-                    <span
-                      className="text-xs px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 border border-amber-400 text-amber-700 dark:text-amber-300 select-none"
-                      title={`Only showing internal free gaps that are at least ${threshold} minute${plural} long.`}
-                      aria-label={`Gap display threshold: ${threshold} minute${plural}`}
-                    >≥{threshold}m gaps</span>
-                  );
-                })()
-              )}
-            </span>
-            {modalLogsLoading && <span className="text-xs text-blue-500">loading…</span>}
+            <h3 className="text-sm font-semibold">Logged</h3>
+            {modalLogsLoading && <span aria-label="Loading" className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />}
           </div>
-          {modalLogs.length === 0 && !modalLogsLoading && (
-            <div className="text-xs text-gray-500">No logs in this interval.</div>
+          {modalLogs.length === 0 && !modalLogsLoading && <p className="tt-text-muted text-sm">Nothing logged here yet.</p>}
+          {modalLogs.length > 0 && <ul className="tt-list">
+            {(() => {
+              const timeline = buildSegmentTimelineWithGaps();
+              if(!timeline) return modalLogs.map(l => renderModalLog(l));
+              return timeline.items.map(it => it.type === 'gap'
+                ? <li key={it.id} className="flex items-center gap-3 py-1.5 pl-4 pr-2">
+                    <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-dashed border-[var(--line-strong)]" />
+                    <span className="tt-text-muted min-w-0 flex-1 text-xs tabular-nums">{minutesToHHMM(it.startMin)}–{minutesToHHMM(it.endMin)} · Free {fmt(it.endMin - it.startMin)}</span>
+                    <Button variant="subtle" className="!min-h-8 !px-3 text-xs" aria-label={`Use free gap ${minutesToHHMM(it.startMin)} to ${minutesToHHMM(it.endMin)}`} onClick={()=> useGapRange(it.startMin, it.endMin)}>Use</Button>
+                  </li>
+                : renderModalLog(it.data, it));
+            })()}
+          </ul>}
+          {modalLogs.length > 0 && modalLogs.length % MODAL_LOGS_PAGE_SIZE === 0 && (
+            <Button variant="ghost" className="w-full" disabled={modalLogsLoading} onClick={()=> setModalLogsPage(p=>p+1)}>Load more</Button>
           )}
-          {modalLogs.length > 0 && (
-            <ul className="max-h-40 overflow-auto divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded text-xs">
-              {(() => {
-                const timeline = buildSegmentTimelineWithGaps();
-                if(timeline){
-                  const { items, segStart, segEnd } = timeline;
-                  const segDur = segEnd - segStart;
-                  return items.map(it => {
-                    if(it.type === 'gap'){
-                      const dur = it.endMin - it.startMin;
-                      const pct = Math.round((dur / segDur)*100);
-                      return (
-                        <li key={it.id} className="flex items-center gap-2 px-2 py-1 bg-amber-50 dark:bg-amber-900/20" aria-label={`Free gap ${minutesToHHMM(it.startMin)} to ${minutesToHHMM(it.endMin)} (${dur} minutes)`}>
-                          <div className="flex-1 flex flex-col">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-mono">{minutesToHHMM(it.startMin)}-{minutesToHHMM(it.endMin)}</span>
-                              <span className="text-xs px-1 rounded bg-amber-200 text-amber-900 border border-amber-400">FREE {dur}m ({pct}%)</span>
-                            </div>
-                          </div>
-                          <Button type="button" size="sm" variant="subtle" aria-label={`Use free gap ${minutesToHHMM(it.startMin)} to ${minutesToHHMM(it.endMin)}`} onClick={()=> useGapRange(it.startMin, it.endMin)}>Use</Button>
-                        </li>
-                      );
-                    } else {
-                      const l = it.data;
-                      const st = new Date(l.startedAt); const et = new Date(l.endedAt);
-                      const pad = (n:number)=> n.toString().padStart(2,'0');
-                      const tm = (d:Date)=> `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-                      const dur = l.minutes ?? Math.round((et.getTime()-st.getTime())/60000);
-                      const editing = editingModalLogId === l.id && editModalLogDraft;
-                      return (
-                        <li key={l.id} className="flex flex-col gap-1 px-2 py-1">
-                          {!editing && (
-                            <div className="flex items-start gap-2">
-                              <div className="flex-1">
-                                <div className="flex flex-wrap items-center gap-1">
-                                  <span className="font-mono">{tm(st)}-{tm(et)}</span>
-                                  <span className="text-xs px-1 rounded bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600">{dur}m</span>
-                                  {l.partial && <span className="text-xs px-1 rounded bg-pink-600 text-white">Partial</span>}
-                                  <span className="text-xs px-1 rounded bg-blue-600 text-white">{{PLANNED:'Scheduled', ADHOC:'Unplanned', MAKEUP:'Catch-up'}[l.source as Source]}</span>
-                                </div>
-                                <div className="truncate">
-                                  {l.activity ? (
-                                    <span className="font-medium" >{l.activity.name}</span>
-                                  ) : <span className="italic text-gray-500">(no activity)</span>}
-                                  {l.comment && <span className="ml-1 text-gray-500">— {l.comment}</span>}
-                                </div>
-                              </div>
-                              <div className="flex flex-col gap-1">
-                                <Button type="button" size="sm" variant="subtle" aria-label={`Edit log ${minutesToHHMM(it.startMin)} to ${minutesToHHMM(it.endMin)}`} disabled={modalLogSaving} onClick={()=> beginEditModalLog(l)} leftIcon={<IconEdit size={14} />}>Edit</Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="danger"
-                                  aria-label={pendingDeleteLogId === l.id ? 'Confirm delete log' : 'Delete log'}
-                                  disabled={modalLogSaving}
-                                  onClick={()=> deleteModalLog(l)}
-                                  leftIcon={<IconTrash size={14} />}
-                                  
-                                >
-                                  {pendingDeleteLogId === l.id ? 'Delete permanently' : 'Delete'}
-                                </Button>
-                              </div>
-                            </div>
-                          )}
-                          {editing && editModalLogDraft && (
-                            <div className="space-y-1 border border-blue-300 dark:border-blue-700 rounded p-2 bg-blue-50 dark:bg-blue-950/30">
-                              <div className="flex items-center gap-2">
-                                <label className="flex items-center gap-1 text-xs">Start
-                                  <input type="time" value={editModalLogDraft.start} onChange={e=> setEditModalLogDraft(d=> d? {...d, start: e.target.value }: d)} className="border rounded px-1 py-0.5 text-xs dark:bg-gray-950 dark:border-gray-700" />
-                                </label>
-                                <label className="flex items-center gap-1 text-xs">End
-                                  <input type="time" value={editModalLogDraft.end} onChange={e=> setEditModalLogDraft(d=> d? {...d, end: e.target.value }: d)} className="border rounded px-1 py-0.5 text-xs dark:bg-gray-950 dark:border-gray-700" />
-                                </label>
-                                <label className="flex items-center gap-1 text-xs">Partial
-                                  <input type="checkbox" checked={editModalLogDraft.partial} onChange={e=> setEditModalLogDraft(d=> d? {...d, partial: e.target.checked }: d)} className="h-3 w-3" />
-                                </label>
-                              </div>
-                              {(() => {
-                                if(!selectedSegment) return null;
-                                const newStartMin = timeStrToMinutes(editModalLogDraft.start);
-                                const newEndMin = timeStrToMinutes(editModalLogDraft.end);
-                                const within = newStartMin >= selectedSegment.startMinute && newEndMin <= selectedSegment.endMinute;
-                                const newDur = Math.max(0, newEndMin - newStartMin);
-                                const st = new Date(l.startedAt); const et = new Date(l.endedAt);
-                                const oldDur = l.minutes ?? Math.round((et.getTime()-st.getTime())/60000);
-                                const diff = newDur - oldDur;
-                                return (
-                                  <div className="flex items-center gap-2 text-xs">
-                                    <span className={`px-1 rounded ${within ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{within ? 'Within range' : 'Out of range'}</span>
-                                    <span className="font-mono">{newDur}m {diff!==0 && (<span className="ml-1">({diff>0?'+':''}{diff}m)</span>)}</span>
-                                    {!within && !( 'temp' in selectedSegment) && (
-                                      <span className="text-xs text-blue-600 dark:text-blue-400">(Adjust the block in Edit routine)</span>
-                                    )}
-                                  </div>
-                                );
-                              })()}
-                              <div className="flex items-center gap-2">
-                                <label className="text-xs">Activity
-                                  <select value={editModalLogDraft.activityId} onChange={e=> setEditModalLogDraft(d=> d? {...d, activityId: e.target.value }: d)} className="ml-1 border rounded px-1 py-0.5 text-xs dark:bg-gray-950 dark:border-gray-700">
-                                    <option value="">(none)</option>
-                                    {activities.map(a=> <option key={a.id} value={a.id}>{a.name}</option>)}
-                                  </select>
-                                </label>
-                                <label className="text-xs">Source
-                                  <select value={editModalLogDraft.source} onChange={e=> setEditModalLogDraft(d=> d? {...d, source: e.target.value as Source }: d)} className="ml-1 border rounded px-1 py-0.5 text-xs dark:bg-gray-950 dark:border-gray-700">
-                                    {SOURCES.map(s=> <option key={s} value={s}>{{PLANNED:'Scheduled',ADHOC:'Unplanned',MAKEUP:'Catch-up'}[s]}</option>)}
-                                  </select>
-                                </label>
-                              </div>
-                              <div>
-                                <input type="text" placeholder="Comment" value={editModalLogDraft.comment} onChange={e=> setEditModalLogDraft(d=> d? {...d, comment: e.target.value }: d)} className="w-full border rounded px-2 py-1 text-xs dark:bg-gray-950 dark:border-gray-700" />
-                              </div>
-                              <div className="flex justify-end gap-2 pt-1">
-                                <Button type="button" size="sm" variant="ghost" disabled={modalLogSaving} onClick={cancelEditModalLog} leftIcon={<IconClose size={14} />}>Cancel</Button>
-                                <Button type="button" size="sm" variant="primary" disabled={modalLogSaving} onClick={()=> saveModalLog(l)} leftIcon={<IconSave size={14} />}>{modalLogSaving ? 'Saving…' : 'Save'}</Button>
-                              </div>
-                            </div>
-                          )}
-                        </li>
-                      );
-                    }
-                  });
-                }
-                // Fallback: plain logs
-                return modalLogs.map(l => {
-                  const st = new Date(l.startedAt); const et = new Date(l.endedAt);
-                  const pad = (n:number)=> n.toString().padStart(2,'0');
-                  const tm = (d:Date)=> `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-                  const dur = l.minutes ?? Math.round((et.getTime()-st.getTime())/60000);
-                  const editing = editingModalLogId === l.id && editModalLogDraft;
-                  return (
-                    <li key={l.id} className="flex flex-col gap-1 px-2 py-1">
-                      {!editing && (
-                        <div className="flex items-start gap-2">
-                          <div className="flex-1">
-                            <div className="flex flex-wrap items-center gap-1">
-                              <span className="font-mono">{tm(st)}-{tm(et)}</span>
-                              <span className="text-xs px-1 rounded bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600">{dur}m</span>
-                              {l.partial && <span className="text-xs px-1 rounded bg-pink-600 text-white">Partial</span>}
-                              <span className="text-xs px-1 rounded bg-blue-600 text-white">{{PLANNED:'Scheduled', ADHOC:'Unplanned', MAKEUP:'Catch-up'}[l.source as Source]}</span>
-                            </div>
-                            <div className="truncate">
-                              {l.activity ? (
-                                <span className="font-medium" >{l.activity.name}</span>
-                              ) : <span className="italic text-gray-500">(no activity)</span>}
-                              {l.comment && <span className="ml-1 text-gray-500">— {l.comment}</span>}
-                            </div>
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <Button type="button" size="sm" variant="subtle" aria-label={`Edit log ${tm(st)} to ${tm(et)}`} disabled={modalLogSaving} onClick={()=> beginEditModalLog(l)} leftIcon={<IconEdit size={14} />}>Edit</Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="danger"
-                              aria-label={pendingDeleteLogId === l.id ? 'Confirm delete log' : 'Delete log'}
-                              disabled={modalLogSaving}
-                              onClick={()=> deleteModalLog(l)}
-                              leftIcon={<IconTrash size={14} />}
-                              
-                            >
-                              {pendingDeleteLogId === l.id ? 'Delete permanently' : 'Delete'}
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-                      {editing && editModalLogDraft && (
-                        <div className="space-y-1 border border-blue-300 dark:border-blue-700 rounded p-2 bg-blue-50 dark:bg-blue-950/30">
-                          <div className="flex items-center gap-2">
-                            <label className="flex items-center gap-1 text-xs">Start
-                              <input type="time" value={editModalLogDraft.start} onChange={e=> setEditModalLogDraft(d=> d? {...d, start: e.target.value }: d)} className="border rounded px-1 py-0.5 text-xs dark:bg-gray-950 dark:border-gray-700" />
-                            </label>
-                            <label className="flex items-center gap-1 text-xs">End
-                              <input type="time" value={editModalLogDraft.end} onChange={e=> setEditModalLogDraft(d=> d? {...d, end: e.target.value }: d)} className="border rounded px-1 py-0.5 text-xs dark:bg-gray-950 dark:border-gray-700" />
-                            </label>
-                            <label className="flex items-center gap-1 text-xs">Partial
-                              <input type="checkbox" checked={editModalLogDraft.partial} onChange={e=> setEditModalLogDraft(d=> d? {...d, partial: e.target.checked }: d)} className="h-3 w-3" />
-                            </label>
-                          </div>
-                          {(() => {
-                            if(!selectedSegment) return null;
-                            const newStartMin = timeStrToMinutes(editModalLogDraft.start);
-                            const newEndMin = timeStrToMinutes(editModalLogDraft.end);
-                            const within = newStartMin >= selectedSegment.startMinute && newEndMin <= selectedSegment.endMinute;
-                            const newDur = Math.max(0, newEndMin - newStartMin);
-                            const st = new Date(l.startedAt); const et = new Date(l.endedAt);
-                            const oldDur = l.minutes ?? Math.round((et.getTime()-st.getTime())/60000);
-                            const diff = newDur - oldDur;
-                            return (
-                              <div className="flex items-center gap-2 text-xs">
-                                <span className={`px-1 rounded ${within ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>{within ? 'Within range' : 'Out of range'}</span>
-                                <span className="font-mono">{newDur}m {diff!==0 && (<span className="ml-1">({diff>0?'+':''}{diff}m)</span>)}</span>
-                                {!within && !( 'temp' in selectedSegment) && (
-                                  <span className="text-xs text-blue-600 dark:text-blue-400">(Adjust the block in Edit routine)</span>
-                                )}
-                              </div>
-                            );
-                          })()}
-                          <div className="flex items-center gap-2">
-                            <label className="text-xs">Activity
-                              <select value={editModalLogDraft.activityId} onChange={e=> setEditModalLogDraft(d=> d? {...d, activityId: e.target.value }: d)} className="ml-1 border rounded px-1 py-0.5 text-xs dark:bg-gray-950 dark:border-gray-700">
-                                <option value="">(none)</option>
-                                {activities.map(a=> <option key={a.id} value={a.id}>{a.name}</option>)}
-                              </select>
-                            </label>
-                            <label className="text-xs">Source
-                              <select value={editModalLogDraft.source} onChange={e=> setEditModalLogDraft(d=> d? {...d, source: e.target.value as Source }: d)} className="ml-1 border rounded px-1 py-0.5 text-xs dark:bg-gray-950 dark:border-gray-700">
-                                {SOURCES.map(s=> <option key={s} value={s}>{{PLANNED:'Scheduled',ADHOC:'Unplanned',MAKEUP:'Catch-up'}[s]}</option>)}
-                              </select>
-                            </label>
-                          </div>
-                          <div>
-                            <input type="text" placeholder="Comment" value={editModalLogDraft.comment} onChange={e=> setEditModalLogDraft(d=> d? {...d, comment: e.target.value }: d)} className="w-full border rounded px-2 py-1 text-xs dark:bg-gray-950 dark:border-gray-700" />
-                          </div>
-                          <div className="flex justify-end gap-2 pt-1">
-                            <Button type="button" size="sm" variant="ghost" disabled={modalLogSaving} onClick={cancelEditModalLog} leftIcon={<IconClose size={14} />}>Cancel</Button>
-                            <Button type="button" size="sm" variant="primary" disabled={modalLogSaving} onClick={()=> saveModalLog(l)} leftIcon={<IconSave size={14} />}>{modalLogSaving ? 'Saving…' : 'Save'}</Button>
-                          </div>
-                        </div>
-                      )}
-                    </li>
-                  );
-                });
-              })()}
-            </ul>
-          )}
-          {modalLogs.length > 0 && (modalLogs.length % MODAL_LOGS_PAGE_SIZE === 0) && (
-            <div className="pt-1 flex justify-center">
-              <Button type="button" size="sm" variant="secondary" disabled={modalLogsLoading} onClick={()=> setModalLogsPage(p=>p+1)}>Load more</Button>
-            </div>
-          )}
-        </div>
+        </section>
         {modalError && <ErrorState message={modalError} />}
-        <form onSubmit={submitModal} className="space-y-3">
-          <label className="block text-xs space-y-1">
-            <span className="uppercase tracking-wide text-gray-500">Activity</span>
-            <select value={activityId} onChange={e=>setActivityId(e.target.value)} className="w-full border rounded p-1 text-xs dark:bg-gray-950 dark:border-gray-700">
-              <option value="">-- None --</option>
+        <form onSubmit={submitModal} className="space-y-3 border-t border-[var(--line)] pt-4">
+          <h3 className="text-sm font-semibold">Add time</h3>
+          <label className="block"><span className="sr-only">Activity</span>
+            <select value={activityId} onChange={e=>setActivityId(e.target.value)} className="tt-input">
+              <option value="">No activity</option>
               {activities.map(a=> <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
           </label>
-          <label className="flex items-center gap-2 text-xs">
-            <input type="checkbox" checked={useFullRange} onChange={e=>{ setUseFullRange(e.target.checked); if(e.target.checked && selectedSegment){ setStartHHMM(minutesToHHMM(selectedSegment.startMinute)); setEndHHMM(minutesToHHMM(selectedSegment.endMinute)); } }} className="h-3 w-3" />
-            <span>Use full segment range</span>
+          <label className="tt-check">
+            <input type="checkbox" checked={useFullRange} onChange={e=>{ setUseFullRange(e.target.checked); if(e.target.checked){ setStartHHMM(minutesToHHMM(selectedSegment.startMinute)); setEndHHMM(minutesToHHMM(selectedSegment.endMinute)); } }} />
+            Whole block ({minutesToHHMM(selectedSegment.startMinute)}–{minutesToHHMM(selectedSegment.endMinute)})
           </label>
-          {!useFullRange && (
-            <div className="grid grid-cols-2 gap-3">
-              <label className="space-y-1 text-xs">
-                <span className="uppercase tracking-wide text-gray-500">Start</span>
-                <input type="time" required value={startHHMM} min={minutesToHHMM(selectedSegment.startMinute)} max={minutesToHHMM(selectedSegment.endMinute)} onChange={e=>setStartHHMM(e.target.value)} className="w-full border rounded p-1 text-xs dark:bg-gray-950 dark:border-gray-700" />
+          {!useFullRange && <div className="grid grid-cols-2 gap-3">
+            <label><span className="tt-label">Start</span><input type="time" required value={startHHMM} min={minutesToHHMM(selectedSegment.startMinute)} max={minutesToHHMM(selectedSegment.endMinute)} onChange={e=>setStartHHMM(e.target.value)} className="tt-input" /></label>
+            <label><span className="tt-label">End</span><input type="time" required value={endHHMM} min={minutesToHHMM(selectedSegment.startMinute)} max={minutesToHHMM(selectedSegment.endMinute)} onChange={e=>setEndHHMM(e.target.value)} className="tt-input" /></label>
+          </div>}
+          <input type="text" aria-label="Note" maxLength={300} value={comment} onChange={e=>setComment(e.target.value)} placeholder="Note (optional)" className="tt-input" />
+          <details className="rounded-xl border border-[var(--line)] px-4 py-1">
+            <summary className="flex min-h-10 items-center text-sm font-semibold">More options</summary>
+            <div className="space-y-2 pb-3 pt-1">
+              <label className="block"><span className="tt-label">Type of time</span>
+                <select value={source} onChange={e=>setSource(e.target.value as Source)} className="tt-input">
+                  {SOURCES.map(s=> <option key={s} value={s}>{sourceLabel[s]}</option>)}
+                </select>
               </label>
-              <label className="space-y-1 text-xs">
-                <span className="uppercase tracking-wide text-gray-500">End</span>
-                <input type="time" required value={endHHMM} min={minutesToHHMM(selectedSegment.startMinute)} max={minutesToHHMM(selectedSegment.endMinute)} onChange={e=>setEndHHMM(e.target.value)} className="w-full border rounded p-1 text-xs dark:bg-gray-950 dark:border-gray-700" />
-              </label>
+              <label className="tt-check"><input type="checkbox" checked={partial} onChange={e=>setPartial(e.target.checked)} />Partially completed</label>
             </div>
-          )}
-          <div className="flex flex-wrap gap-4">
-            <label className="flex items-center gap-1 text-xs">
-              <input type="checkbox" checked={partial} onChange={e=>setPartial(e.target.checked)} className="h-3 w-3" />
-              <span>Partially completed</span>
-            </label>
-            <label className="text-xs flex items-center gap-1">
-              <span>Type of time</span>
-              <select value={source} onChange={e=>setSource(e.target.value as Source)} className="border rounded px-1 py-0.5 text-xs dark:bg-gray-950 dark:border-gray-700">
-                {SOURCES.map(s=> <option key={s} value={s}>{{PLANNED:'Scheduled',ADHOC:'Unplanned',MAKEUP:'Catch-up'}[s]}</option>)}
-              </select>
-            </label>
-          </div>
-          <label className="block space-y-1 text-xs">
-            <span className="uppercase tracking-wide text-gray-500">Comment</span>
-            <input type="text" maxLength={300} value={comment} onChange={e=>setComment(e.target.value)} placeholder="Optional comment" className="w-full border rounded p-1 text-xs dark:bg-gray-950 dark:border-gray-700" />
-          </label>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" size="sm" variant="ghost" onClick={closeModal} disabled={saving} leftIcon={<IconClose size={14} />}>Cancel</Button>
-            <Button type="submit" loading={saving}>Save time entry</Button>
+          </details>
+          <div className="flex gap-2 pt-1 sm:justify-end">
+            <Button variant="secondary" className="flex-1 sm:flex-none" onClick={closeModal} disabled={saving}>Cancel</Button>
+            <Button type="submit" className="flex-1 sm:flex-none" loading={saving}>Add entry</Button>
           </div>
         </form>
       </div>
     </Dialog>) : null;
 
+  // Weekly free time: open cells between segment boundaries (optionally counting blocks with no activity).
+  const freeSummary = (() => {
+    if(view !== 'grid' || !effectiveRows.length) return null;
+    let freeAvailable = 0, freeUsed = 0;
+    for(const r of effectiveRows){
+      const span = r.end - r.start;
+      for(let day=1; day<=7; day++){
+        if(byDay[day].some(s=> s.startMinute <= r.start && s.endMinute >= r.end)) continue;
+        freeAvailable += span;
+        const fd = freeLogsMap[`${day}:${r.start}-${r.end}`];
+        if(fd) freeUsed += Math.min(span, fd.totalMinutes);
+      }
+    }
+    if(includeEmptySegmentsAsFree){
+      for(const seg of segments){
+        if(seg.activityId) continue;
+        const segDur = seg.endMinute - seg.startMinute;
+        freeAvailable += segDur;
+        freeUsed += Math.min(segDur, segmentLoggedMinutes[seg.id] || 0);
+      }
+    }
+    if(!freeAvailable) return null;
+    return { freeAvailable, freeUsed, pct:Math.round(freeUsed / freeAvailable * 100) };
+  })();
+
+  const showGrid = segments.length > 0 || effectiveRows.length > 1;
   return (
-    <div className="space-y-4">
-      <CurrentActivityBar />
-      <div className="flex items-center gap-3 flex-wrap">
-        <h2 className="mr-auto text-lg font-semibold">{weekRangeLabel}</h2>
-        <div className="flex items-center gap-1">
-          <IconButton size="sm" variant="subtle" label="Previous week" onClick={gotoPrevWeek} icon={<IconChevronLeft size={14} />} />
-          <Button size="sm" variant="secondary" onClick={gotoThisWeek}>This week</Button>
-          <IconButton size="sm" variant="subtle" label="Next week" onClick={gotoNextWeek} icon={<IconChevronRight size={14} />} />
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <WeekNav className="min-w-0 flex-1 sm:max-w-sm sm:flex-none" />
+        <div className="tt-segmented shrink-0" role="group" aria-label="Week layout">
+          <button type="button" aria-pressed={view === 'agenda'} onClick={() => setView('agenda')} aria-label="Day by day" title="Day by day"><IconList size={17} /></button>
+          <button type="button" aria-pressed={view === 'grid'} onClick={() => setView('grid')} aria-label="Time grid" title="Time grid"><IconSegment size={17} /></button>
         </div>
-        <UnitSwitch />
-        {/* Historical snapshot, fetch counter & manual reload removed */}
+        {loadingFreeLogs && <span aria-label="Updating" className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent max-sm:hidden" />}
       </div>
-      {loading && <LoadingState label="Loading your schedule?" />}
-  {!loading && loadingFreeLogs && <div className="text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2"><span className="w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />Loading free logs…</div>}
-      {!loading && !loadingFreeLogs && view === 'grid' && (
-        (()=>{
-          // Compute weekly free minutes used vs free available (only intervals defined by segments boundaries but without segment coverage)
-          if(!effectiveRows.length) return null;
-          let freeAvailable = 0; // sum of all free cells size
-          let freeUsed = 0; // sum of minutes logged in those free cells (capped by cell size)
-          for(const r of effectiveRows){
-            const span = r.end - r.start;
-            for(let day=1; day<=7; day++){
-              const seg = byDay[day].find(s=> s.startMinute <= r.start && s.endMinute >= r.end);
-              if(!seg){
-                freeAvailable += span;
-                const key = `${day}:${r.start}-${r.end}`;
-                const fd = freeLogsMap[key];
-                if(fd){
-                  freeUsed += Math.min(span, fd.totalMinutes); // safeguard
-                }
-              }
-            }
-          }
-          // Opcional: incluir segmentos vacíos (sin actividad planificada) como free
-          if(includeEmptySegmentsAsFree){
-            for(const seg of segments){
-              if(!seg.activityId){
-                const segDur = seg.endMinute - seg.startMinute;
-                freeAvailable += segDur;
-                const logged = segmentLoggedMinutes[seg.id] || 0;
-                freeUsed += Math.min(segDur, logged);
-              }
-            }
-          }
-          if(freeAvailable===0) return null;
-          const pct = Math.round((freeUsed / freeAvailable) * 100);
-          const fmt = (n:number)=> unit==='min' ? fmtMinutes(n) : fmtHoursMinutes(n);
-          return (
-            <div className="text-xs flex flex-wrap items-center gap-3 bg-gray-50 dark:bg-gray-800/40 rounded border border-gray-200 dark:border-gray-700 p-2">
-              <div className="font-medium">Free time used (week):</div>
-              <div className="px-1.5 py-0.5 rounded bg-amber-500/90 text-black font-semibold">{fmt(freeUsed)}</div>
-              <div className="text-gray-600 dark:text-gray-400">/ {fmt(freeAvailable)}</div>
-              <div className="text-gray-800 dark:text-gray-300 font-medium">({pct}%)</div>
-              <div className="flex-1 h-2 rounded bg-gray-200 dark:bg-gray-700 overflow-hidden min-w-[120px]">
-                <div style={{ width: `${pct}%` }} className="h-full bg-amber-500 transition-all" />
-              </div>
-              <label className="flex items-center gap-1 ml-auto select-none">
-                <input type="checkbox" className="h-3 w-3" checked={includeEmptySegmentsAsFree} onChange={e=>{ setIncludeEmptySegmentsAsFree(e.target.checked); /* recalculo implícito con re-render */ }} />
-                <span className="text-xs text-gray-600 dark:text-gray-400">count empty segments</span>
-              </label>
-            </div>
-          );
-        })()
-      )}
-      {error && <ErrorState message={error} onRetry={() => setRetry(v=>v+1)} />}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="tt-segmented" role="group" aria-label="Week layout">
-          <button type="button" aria-pressed={view === 'agenda'} onClick={() => setView('agenda')}>Day by day</button>
-          <button type="button" aria-pressed={view === 'grid'} onClick={() => setView('grid')}>Time grid</button>
-        </div>
-        <Button variant="secondary" onClick={onManage}>Edit weekly routine</Button>
-      </div>
-      {!loading && !error && !segments.length && <EmptyState title="Your week is open" description="Add repeating time blocks to make room for your priorities. You can also record time without a schedule."><Button onClick={onManage}>Plan your first time block</Button></EmptyState>}
-      {!loading && !error && view === 'agenda' && <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {WEEKDAY_NAMES_LONG.map((day, index) => <section key={day} className="tt-panel tt-panel-padding">
-          <div className="mb-5 flex items-center justify-between gap-2"><h3 className="font-semibold">{day}</h3><span className="tt-text-muted text-sm">{new Date(weekDateForWeekday(index+1)+'T12:00:00').toLocaleDateString(undefined, { day:'numeric', month:'short' })}</span></div>
-          <div className="space-y-3">{[...byDay[index+1]].sort((a,b)=>a.startMinute-b.startMinute).map(segment => <button key={segment.id} type="button" className="w-full rounded-xl border border-slate-200 p-4 text-left hover:border-indigo-400 dark:border-slate-600" onClick={() => openModal(segment)} aria-label={'Record time for ' + (segment.activity?.name || 'unassigned block') + ', ' + day + ', ' + minutesToHHMM(segment.startMinute)}>
-            <p className="tt-text-muted mb-2 text-sm tabular-nums">{minutesToHHMM(segment.startMinute)} ? {minutesToHHMM(segment.endMinute)}</p>
-            <p className="flex items-center gap-2 font-semibold"><span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background:segment.activity?.color || '#94a3b8' }} />{segment.activity?.name || 'Open time block'}</p>
-            <p className="tt-text-muted mt-2 text-sm">{unit === 'hr' ? fmtHoursMinutes(segmentLoggedMinutes[segment.id] || 0) : fmtMinutes(segmentLoggedMinutes[segment.id] || 0)} recorded</p>
-          </button>)}
-          {!byDay[index+1].length && <p className="tt-text-muted py-3 text-sm">No planned blocks. A day with possibilities.</p>}</div>
-          <Button className="mt-4 w-full" variant="ghost" onClick={() => { openModal({ temp:true, weekday:index+1, startMinute:0, endMinute:1440 }); setUseFullRange(false); setStartHHMM('09:00'); setEndHHMM('10:00'); }}>Add time for {day}</Button>
-        </section>)}
+      <DayPicker className="sm:hidden" value={selectedDay} onChange={setSelectedDay} dates={weekDates} />
+      {freeSummary && <div className="tt-panel flex items-center gap-3 px-4 py-2.5 text-sm">
+        <span className="shrink-0 font-medium">Free time used</span>
+        <div className="tt-progress min-w-[48px] flex-1"><div style={{ width:freeSummary.pct + '%', background:'#f59e0b' }} /></div>
+        <span className="tt-text-muted shrink-0 tabular-nums"><strong className="text-[var(--ink)]">{fmt(freeSummary.freeUsed)}</strong> / {fmt(freeSummary.freeAvailable)}</span>
+        <Menu label="Free time options" items={[{ label:'Count empty blocks as free', checked:includeEmptySegmentsAsFree, onSelect:() => setIncludeEmptySegmentsAsFree(v => !v) }]} />
       </div>}
-      {!loading && !error && view === 'grid' && (
-        <div role="region" aria-label="Weekly time grid. Scroll horizontally to see all days." tabIndex={0} className="overflow-auto rounded-xl border border-gray-200 dark:border-gray-700">
-          <table className="text-sm min-w-full border-collapse"><caption className="sr-only">Weekly schedule. Choose a time block to record time.</caption>
-            <thead className="bg-gray-100 dark:bg-gray-800">
+      {loading && <LoadingState label="Loading your schedule…" />}
+      {error && <ErrorState message={error} onRetry={() => setRetry(v=>v+1)} />}
+      {!loading && !error && !segments.length && <EmptyState title="No routine yet" icon={<IconCalendar size={24} />}><Button leftIcon={<IconAdd size={18} />} onClick={onManage}>Plan a block</Button></EmptyState>}
+      {!loading && !error && view === 'agenda' && <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {WEEKDAY_NAMES_LONG.map((day, index) => {
+          const blocks = [...byDay[index+1]].sort((a,b)=>a.startMinute-b.startMinute);
+          if(!segments.length && index+1 !== selectedDay) return null;
+          return <section key={day} className={'space-y-1.5 ' + (index+1 === selectedDay ? '' : 'max-sm:hidden')}>
+            <div className="flex items-baseline justify-between gap-2 px-1">
+              <h3 className="text-sm font-semibold">{day} <span className="tt-text-muted font-normal">{new Date(weekDates[index]+'T12:00:00').toLocaleDateString(undefined, { day:'numeric', month:'short' })}</span></h3>
+              <Button variant="ghost" className="!min-h-8 !px-2 text-xs" leftIcon={<IconAdd size={14} />}
+                onClick={() => { openModal({ temp:true, weekday:index+1, startMinute:0, endMinute:1440 }); setUseFullRange(false); setStartHHMM('09:00'); setEndHHMM('10:00'); }}>Log</Button>
+            </div>
+            <ul className="tt-list">
+              {blocks.map(segment => {
+                const logged = segmentLoggedMinutes[segment.id] || 0;
+                const planned = segment.endMinute - segment.startMinute;
+                return <li key={segment.id}><button type="button" className="tt-row tt-row-button !pr-4" onClick={() => openModal(segment)}
+                  aria-label={'Record time for ' + (segment.activity?.name || 'open block') + ', ' + day + ', ' + minutesToHHMM(segment.startMinute)}>
+                  <span aria-hidden="true" className="h-8 w-1 shrink-0 rounded-full" style={{ background:segment.activity?.color || 'var(--line-strong)' }} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{segment.activity?.name || 'Open block'}</span>
+                    <span className="tt-text-muted block text-xs tabular-nums">{minutesToHHMM(segment.startMinute)}–{minutesToHHMM(segment.endMinute)}</span>
+                  </span>
+                  <span className="shrink-0 text-right text-xs tabular-nums"><strong className="block text-sm">{fmt(logged)}</strong><span className="tt-text-muted">of {fmt(planned)}</span></span>
+                </button></li>;
+              })}
+              {!blocks.length && <li className="tt-text-muted px-4 py-3 text-sm">No blocks planned.</li>}
+            </ul>
+          </section>;
+        })}
+      </div>}
+      {!loading && !error && view === 'grid' && showGrid && (
+        <div role="region" aria-label="Weekly time grid" tabIndex={0} className="tt-panel max-h-[calc(100dvh-240px)] overflow-auto sm:max-h-[calc(100dvh-220px)]">
+          <table className="tt-grid sm:min-w-[860px]"><caption className="sr-only">Weekly schedule. Choose a time block to record time.</caption>
+            <thead>
               <tr>
-                <th className="px-2 py-2 text-left font-medium sticky left-0 bg-gray-100 dark:bg-gray-800 z-10">Time</th>
-                {WEEKDAY_NAMES_LONG.map((d,i)=>(
-                  <th key={d} className="px-2 py-2 font-medium text-left">{d}</th>
+                <th className="tt-grid-time">Time</th>
+                {WEEKDAY_NAMES_SHORT.map((d,i)=>(
+                  <th key={d} data-today={weekDates[i] === todayISO || undefined} className={i+1 === selectedDay ? '' : 'max-sm:hidden'}>
+                    {d} <span className="font-normal">{Number(weekDates[i].slice(8))}</span>
+                  </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {effectiveRows.map(r=>{
-                const label = `${minutesToHHMM(r.start)} - ${minutesToHHMM(r.end)}`;
-                return (
-                  <tr key={r.start+"-"+r.end} className="even:bg-white odd:bg-gray-50 dark:even:bg-gray-900 dark:odd:bg-gray-950">
-                    <td className="px-2 py-1 font-mono text-xs sticky left-0 bg-inherit whitespace-nowrap">{label}</td>
-                    {Array.from({length:7}, (_,idx)=> idx+1).map(day => {
-                      const act = cellActivity(day, r.start, r.end);
-                        const actColor = act.color; // preserve color reference
-                      const segId = act.seg?.id;
-                      const dom = segId ? segmentDominantActivity[segId] : undefined;
-                      const breakdown = segId ? segmentBreakdown[segId] : undefined;
-                      const plannedActivityId = act.seg?.activityId || null;
-                      const multi = breakdown && breakdown.length > 1;
-                      const hasAny = breakdown && breakdown.length > 0;
-                      const dominantDiffers = !!(dom && dom.activityId && plannedActivityId && dom.activityId !== plannedActivityId);
-                      const bg = act.seg ? 'bg-blue-50/40 dark:bg-blue-900/10 hover:bg-blue-100 dark:hover:bg-blue-900/40 cursor-pointer' : 'hover:bg-blue-50 dark:hover:bg-blue-900/30 cursor-pointer';
-                      const freeKey = `${day}:${r.start}-${r.end}`;
-                      const overlayData = freeLogsMap[freeKey]; // may exist for free or planned cells
-                      const handleCellClick = () => {
-                        if(act.seg){
-                          openModal(act.seg);
-                        } else {
-                          openModal({ temp:true, weekday: day, startMinute: r.start, endMinute: r.end });
-                        }
-                      };
-                      return (
-                        <td key={day} className={`group relative px-2 py-1 whitespace-nowrap ${bg} ${(!act.seg && overlayData) ? 'border border-amber-400/40 ring-1 ring-amber-400/30 rounded' : ''}`}
-                        ><button type="button" onClick={handleCellClick} className="block min-h-16 w-full rounded-lg p-2 text-left" aria-label={WEEKDAY_NAMES_LONG[day-1] + ', ' + label + ', ' + act.name + '. Record time'}>
-                          {act.seg ? (
-                            hasAny ? (
-                              <div className="flex flex-col gap-0.5">
-                                {plannedActivityId ? (
-                                  <span className={`font-medium ${dominantDiffers || (multi && (!dom || dom.activityId !== plannedActivityId)) ? 'line-through opacity-50' : ''}`} >
-                                    {act.name}
-                                  </span>
-                                ) : (
-                                  (()=>{
-                                    // Segment was FREE (no planned activity). If we have breakdown, show the real activity (single) or dominant.
-                                    if(breakdown && breakdown.length){
-                                      const primaryEntry = breakdown.length === 1 ? breakdown[0] : (dom ? dom : breakdown[0]);
-                                      const primaryAct = primaryEntry.activityId ? activities.find(a=>a.id===primaryEntry.activityId) : null;
-                                      const primaryColor = primaryAct?.color || undefined;
-                                      const primaryName = primaryAct?.name || '—';
-                                      return (
-                                        <span className="font-medium" >
-                                          {primaryName}{breakdown.length>1 ? '' : ''}
-                                        </span>
-                                      );
-                                    }
-                                    // Fallback: still free with no logs
-                                    return <span className="font-medium" >{act.name}</span>;
-                                  })()
-                                )}
-                                <div className="flex flex-wrap gap-x-1 gap-y-0.5">
-                                  {breakdown?.map(b => {
-                                    const a = b.activityId ? activities.find(x=>x.id===b.activityId) : null;
-                                    const nm = a ? a.name : '—';
-                                    const pctBase = (act.seg!.endMinute - act.seg!.startMinute) || 1;
-                                    const pct = Math.round((b.minutes / pctBase) * 100);
-                                    const highlight = dom && dom.activityId === b.activityId;
-                                    const chipBg = a?.color || '#6b7280';
-                                    const chipFg = pickTextColor(chipBg);
-                                    return (
-                                      <span
-                                        key={(b.activityId||'none')}
-                                        className={`px-1 py-0.5 rounded text-xs border ${highlight ? 'ring-1 ring-amber-400' : ''}`}
-                                        style={{ backgroundColor: chipBg as string, color: chipFg as string, borderColor: chipFg+'20' }}
-                                        title={`${nm} • ${(unit==='min'? fmtMinutes(b.minutes) : fmtHoursMinutes(b.minutes))} (${pct}%)`}
-                                      >{nm} {unit==='min'? fmtMinutes(b.minutes) : fmtHoursMinutes(b.minutes)} ({pct}%)</span>
-                                    );
-                                  })}
-                                  {(() => {
-                                    if(!breakdown || !act.seg) return null;
-                                    const totalLogged = breakdown.reduce((sum,b)=> sum + b.minutes, 0);
-                                    const segDur = act.seg.endMinute - act.seg.startMinute;
-                                    const remaining = segDur - totalLogged;
-                                    if(remaining > 0){
-                                      const pct = Math.round((remaining / segDur) * 100);
-                                      return (
-                                        <span key="__free__" className="px-1 py-0.5 rounded text-xs border bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300" title={`Free • ${(unit==='min'? fmtMinutes(remaining) : fmtHoursMinutes(remaining))} (${pct}%)`}>
-                                          Free {unit==='min'? fmtMinutes(remaining) : fmtHoursMinutes(remaining)} ({pct}%)
-                                        </span>
-                                      );
-                                    }
-                                    return null;
-                                  })()}
-                                </div>
-                                {/* Overlay chips for unlinked logs intersecting this planned cell */}
-                                {overlayData && (
-                                  <div className="flex flex-wrap gap-0.5 mt-0.5">
-                                    {overlayData.activities.slice(0,3).map((a,idx) => (
-                                      <span
-                                        key={`overlay-${a.activityId}`}
-                                        className={`px-1 py-0.5 rounded text-xs border ${idx===0 ? 'ring-1 ring-amber-400' : ''}`}
-                                        style={{ backgroundColor: (a.color || '#6b7280') as string, color: pickTextColor(a.color || '#6b7280') as string, borderColor: pickTextColor(a.color || '#6b7280')+'20' }}
-                                        title={`${a.name} • ${(unit==='min'? fmtMinutes(a.minutes) : fmtHoursMinutes(a.minutes))} (${a.percent}%)`}
-                                      >{a.name} {unit==='min'? fmtMinutes(a.minutes) : fmtHoursMinutes(a.minutes)}</span>
-                                    ))}
-                                    {overlayData.activities.length > 3 && (
-                                      <span className="px-1 py-0.5 rounded text-xs border bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300" title={overlayData.activities.slice(3).map((a)=>`${a.name} ${a.minutes}m`).join(', ')}>+{overlayData.activities.length - 3} more</span>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="font-medium" >{act.name}</span>
-                            )
-                          ) : (
-                            overlayData ? (
-                              <div className="flex flex-col gap-0.5">
-                                <span className="font-medium text-amber-800 dark:text-amber-300 dark:text-amber-400">Free</span>
-                                <div className="flex flex-wrap gap-0.5">
-                                  {(() => {
-                                    const list = overlayData.activities.slice(0,3);
-                                    return list.map((a,idx) => (
-                                      <span
-                                        key={a.activityId}
-                                        className={`px-1 py-0.5 rounded text-xs border ${idx===0 ? 'ring-1 ring-amber-400' : ''}`}
-                                        style={{ backgroundColor: (a.color || '#6b7280') as string, color: pickTextColor(a.color || '#6b7280') as string, borderColor: pickTextColor(a.color || '#6b7280')+'20' }}
-                                        title={`${a.name} • ${(unit==='min'? fmtMinutes(a.minutes) : fmtHoursMinutes(a.minutes))} (${a.percent}%)`}
-                                      >{a.name} {unit==='min'? fmtMinutes(a.minutes) : fmtHoursMinutes(a.minutes)}</span>
-                                    ));
-                                  })()}
-                                  {overlayData.activities.length > 3 && (
-                                    <span className="px-1 py-0.5 rounded text-xs border bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300" title={overlayData.activities.slice(3).map((a)=>`${a.name} ${a.minutes}m`).join(', ')}>+{overlayData.activities.length - 3} more</span>
-                                  )}
-                                </div>
-                              </div>
-                            ) : (
-                              <span className="font-medium" >{act.name}</span>
-                            )
-                          )}
-                          {overlayData && (
-                            (()=>{
-                              const domColor = overlayData.activities[0]?.color || '#92400e';
-                              const textColor = pickTextColor(domColor);
-                              const titleStr = act.seg ? 'Time logged in this interval' : 'Time logged in free interval';
-                              return (
-                                <span
-                                  className="absolute top-0 right-0 m-0.5 flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold shadow select-none"
-                                  style={{ backgroundColor: domColor as string, color: textColor as string, border: `1px solid ${textColor}20` }}
-                                  title={titleStr}
-                                >
-                                  <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: textColor as string, opacity: 0.6 }} />
-                                  LOG {unit==='min'? fmtMinutes(overlayData.totalMinutes) : fmtHoursMinutes(overlayData.totalMinutes)}
-                                </span>
-                              );
-                            })()
-                          )}
-                          {act.seg && act.seg.activityId && (
-                            <span className={`block text-xs mt-0.5 text-gray-500 ${usageUpdating ? 'opacity-60' : ''}`}>
-                              {!hasLoadedUsage ? '…' : (usageUpdating ? 'updating…' : `${unit==='min' ? fmtMinutes(segmentLoggedMinutes[act.seg.id] ? segmentLoggedMinutes[act.seg.id] : 0) : fmtHoursMinutes(segmentLoggedMinutes[act.seg.id] ? segmentLoggedMinutes[act.seg.id] : 0)} / ${unit==='min' ? fmtMinutes((act.seg.endMinute - act.seg.startMinute)) : fmtHoursMinutes((act.seg.endMinute - act.seg.startMinute))}`)}
-                            </span>
-                          )}
-                          {act.seg && multi && (
-                            <span className="absolute top-0 right-0 translate-y-[-2px] translate-x-[2px] text-xs px-1 py-0.5 rounded bg-amber-600 text-white" title="Multiple activities logged in this segment">MULTI</span>
-                          )}
-                        </button></td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-              {effectiveRows.length===0 && (
-                <tr><td colSpan={8} className="text-center py-6 text-gray-500">No segments configured.</td></tr>
-              )}
+              {effectiveRows.map((r, row)=> (
+                <tr key={r.start+'-'+r.end}>
+                  <td className="tt-grid-time">{minutesToHHMM(r.start)}<span className="block opacity-60">{minutesToHHMM(r.end)}</span></td>
+                  {[1,2,3,4,5,6,7].map(day => {
+                    const cell = gridColumns[day]?.[row];
+                    return cell ? renderGridCell(day, cell) : null;
+                  })}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       )}
-      {/* Debug panel removed */}
       {segmentModal}
-
     </div>
   );
 }

@@ -9,6 +9,7 @@ export interface WeekContextValue {
   gotoNextWeek: ()=>void;
   gotoThisWeek: ()=>void;
   weekRangeLabel: string; // e.g. 09 Sep – 15 Sep 2025
+  isThisWeek: boolean;
 }
 
 const WeekContext = createContext<WeekContextValue | undefined>(undefined);
@@ -78,7 +79,8 @@ export function WeekProvider({ children }: { children: React.ReactNode }){
     gotoPrevWeek,
     gotoNextWeek,
     gotoThisWeek,
-    weekRangeLabel: formatRange(weekStart)
+    weekRangeLabel: formatRange(weekStart),
+    isThisWeek: weekStart === computeMonday(new Date())
   }), [weekStart, gotoPrevWeek, gotoNextWeek, gotoThisWeek]);
 
   return <WeekContext.Provider value={value}>{children}</WeekContext.Provider>;

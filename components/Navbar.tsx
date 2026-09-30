@@ -1,40 +1,68 @@
 "use client";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useSession } from 'next-auth/react';
-import SignOutButton from './SignOutButton';
+import { signOut, useSession } from 'next-auth/react';
 import { useTheme } from './ThemeProvider';
-import { IconClock, IconCalendar, IconLayers, IconLog, IconSun, IconMoon } from './ui/icons';
-import { IconButton } from './ui/Button';
+import { useUnit } from './UnitProvider';
+import { Menu } from './ui/Menu';
+import { IconCalendar, IconClock, IconHome, IconLayers, IconLog, IconLogout, IconMoon, IconSun } from './ui/icons';
 
 const links = [
-  { href:'/', label:'Overview', icon:IconClock },
+  { href:'/', label:'Overview', icon:IconHome },
   { href:'/activities', label:'Activities', icon:IconLayers },
   { href:'/schedule', label:'Schedule', icon:IconCalendar },
   { href:'/logs', label:'Time log', icon:IconLog }
 ];
+const isActive = (pathname:string, href:string) => href === '/' ? pathname === '/' : pathname.startsWith(href);
+
+function AccountMenu() {
+  const { data:session } = useSession();
+  const { theme, setTheme } = useTheme();
+  const { unit, setUnit } = useUnit();
+  const name = session?.user?.name || 'Account';
+  return <Menu label="Account and settings" triggerClassName="!min-h-10 !w-10 !rounded-full !p-0"
+    trigger={<span aria-hidden="true" className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 text-sm font-bold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-200">{name.trim().charAt(0).toUpperCase()}</span>}
+    header={<div className="px-3 pb-2 pt-2"><p className="truncate font-semibold">{name}</p>{session?.user?.email && <p className="tt-text-muted truncate text-xs">{session.user.email}</p>}</div>}
+    items={[
+      'separator',
+      { heading:'Theme' },
+      { label:'Light', icon:<IconSun size={18} />, checked:theme === 'light', onSelect:() => setTheme('light') },
+      { label:'Dark', icon:<IconMoon size={18} />, checked:theme === 'dark', onSelect:() => setTheme('dark') },
+      { heading:'Show time in' },
+      { label:'Hours', icon:<span className="text-xs font-bold">h</span>, checked:unit === 'hr', onSelect:() => setUnit('hr') },
+      { label:'Minutes', icon:<span className="text-xs font-bold">m</span>, checked:unit === 'min', onSelect:() => setUnit('min') },
+      'separator',
+      { label:'Sign out', icon:<IconLogout size={18} />, danger:true, onSelect:() => signOut({ callbackUrl:'/login' }) }
+    ]} />;
+}
+
 export function Navbar() {
   const { data:session } = useSession();
-  const { theme, toggle } = useTheme();
   const pathname = usePathname();
   if (!(session as any)?.userId) return null;
-  return <header className="border-b border-slate-200 pt-5 dark:border-slate-700">
-    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-      <Link href="/" className="inline-flex items-center gap-2.5 font-bold tracking-tight text-lg" aria-label="TaskTimmer home">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white"><IconClock size={23} /></span>
-        TaskTimmer
+  const current = links.find(link => isActive(pathname, link.href));
+  return <header className="tt-appbar">
+    <div className="tt-appbar-row">
+      <Link href="/" className="flex min-w-0 items-center gap-2.5 font-bold tracking-tight" aria-label="TaskTimmer home">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-indigo-600 text-white shadow-sm shadow-indigo-600/30"><IconClock size={21} /></span>
+        <span className="hidden text-lg sm:inline">TaskTimmer</span>
+        <span className="truncate text-lg sm:hidden">{current?.label || 'TaskTimmer'}</span>
       </Link>
-      <div className="flex items-center gap-1 sm:gap-3">
-        <span className="tt-text-muted hidden max-w-40 truncate text-sm md:block">{session?.user?.name}</span>
-        <IconButton variant="ghost" onClick={toggle} label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} icon={theme === 'dark' ? <IconSun size={20} /> : <IconMoon size={20} />} />
-        <SignOutButton />
-      </div>
+      <nav aria-label="Main navigation" className="ml-6 hidden flex-1 items-center gap-1 sm:flex">
+        {links.map(({ href, label, icon:Icon }) => <Link key={href} href={href} className="tt-toplink" aria-current={isActive(pathname, href) ? 'page' : undefined}><Icon size={17} />{label}</Link>)}
+      </nav>
+      <div className="ml-auto"><AccountMenu /></div>
     </div>
-    <nav aria-label="Main navigation" className="grid grid-cols-4 gap-1 sm:flex sm:gap-2">
-      {links.map(({ href, label, icon:Icon }) => <Link key={href} href={href} aria-current={pathname === href ? 'page' : undefined}
-        className={'flex min-h-14 flex-col items-center justify-center gap-1 rounded-t-xl border-b-2 px-2 py-3 text-xs font-semibold sm:min-h-12 sm:flex-row sm:gap-2 sm:px-5 sm:text-sm ' + (pathname === href ? 'border-indigo-600 bg-indigo-50 text-indigo-700 dark:border-indigo-400 dark:bg-indigo-950 dark:text-indigo-200' : 'border-transparent text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800')}>
-        <Icon size={18} />{label}
-      </Link>)}
-    </nav>
   </header>;
+}
+
+export function TabBar() {
+  const { data:session } = useSession();
+  const pathname = usePathname();
+  if (!(session as any)?.userId) return null;
+  return <nav aria-label="Main navigation" className="tt-tabbar sm:hidden">
+    {links.map(({ href, label, icon:Icon }) => <Link key={href} href={href} className="tt-tab" aria-current={isActive(pathname, href) ? 'page' : undefined}>
+      <span className="tt-tab-icon"><Icon size={21} /></span>{label}
+    </Link>)}
+  </nav>;
 }

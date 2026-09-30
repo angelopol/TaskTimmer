@@ -1,5 +1,5 @@
 /* Basic service worker for TaskTimmer */
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v5';
 const PRECACHE = `precache-${CACHE_VERSION}`;
 const RUNTIME = `runtime-${CACHE_VERSION}`;
 
@@ -7,7 +7,8 @@ const RUNTIME = `runtime-${CACHE_VERSION}`;
 const PRECACHE_URLS = [
   '/offline.html',
   '/manifest.webmanifest',
-  '/icon-clock-pixel.svg'
+  '/icon.svg',
+  '/favicon.ico'
 ];
 
 self.addEventListener('install', event => {

@@ -4,8 +4,10 @@ import { Dialog } from '../ui/Dialog';
 import { ErrorState, LoadingState } from '../ui/Feedback';
 import { minutesToHHMM, hhmmToMinutes, WEEKDAY_NAMES_LONG } from '../../lib/time';
 import { useToast } from '../toast/ToastProvider';
-import { Button, IconButton } from '../../components/ui/Button';
-import { IconAdd, IconEdit, IconTrash, IconClose, IconSave } from '../../components/ui/icons';
+import { Button } from '../ui/Button';
+import { Menu } from '../ui/Menu';
+import { DayPicker } from '../ui/DayPicker';
+import { IconAdd, IconEdit, IconTrash } from '../ui/icons';
 
 interface Activity { id: string; name: string; color: string | null; }
 interface Segment { id: string; weekday: number; startMinute: number; endMinute: number; activityId: string | null; notes: string | null; activity?: Activity | null; effectiveFrom: string; effectiveTo: string | null; }
@@ -32,7 +34,7 @@ export default function ScheduleSegmentsClient(){
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
-  const [filterWeekday, setFilterWeekday] = useState<number | 'all'>('all');
+  const [selectedDay, setSelectedDay] = useState(() => new Date().getDay() || 7);
   const [pendingDeleteSegmentId, setPendingDeleteSegmentId] = useState<string | null>(null);
   // Using global toast provider now
   // const [toasts, setToasts] = useState<{id:string; msg:string;}[]>([]);
@@ -154,15 +156,15 @@ export default function ScheduleSegmentsClient(){
       }
       const data = await res.json();
       if(!res.ok){
-        if(data.error === 'Overlap with existing segment') throw new Error('Overlap with another segment');
+        if(data.error === 'Overlap with existing segment') throw new Error('This overlaps another block.');
         throw new Error(data.error || 'Save failed');
       }
       if(editing.id && data.mode === 'versioned' && data.newEffectiveFrom){
-  addToast({ message: `Scheduled future version (${data.newEffectiveFrom})`, type: 'success' });
+  addToast({ message: `Change scheduled from ${data.newEffectiveFrom}.`, type: 'success' });
       } else if(editing.id && data.mode === 'now') {
-  addToast({ message: 'Updated segment', type: 'success' });
+  addToast({ message: 'Block updated.', type: 'success' });
       } else if(!editing.id){
-  addToast({ message: 'Created segment', type: 'success' });
+  addToast({ message: 'Block added.', type: 'success' });
       }
       await loadAll();
       reset();
@@ -183,171 +185,125 @@ export default function ScheduleSegmentsClient(){
       if(!res.ok) throw new Error(data.error || 'Delete failed');
       setSegments(s => s.filter(x=>x.id!==id));
       setPendingDeleteSegmentId(null);
+      addToast({ message: 'Block deleted.', type: 'success' });
   } catch(e:any){ setError(e.message); addToast({ message: e.message || 'Failed to delete segment', type: 'error' }); }
     finally { setSaving(false); }
   }
 
-  const displayWeekdays = (filterWeekday === 'all') ? [1,2,3,4,5,6,7] : [filterWeekday];
+  const nextMonday = (() => { const d = new Date(); const days = ((8-d.getDay())%7)||7; d.setDate(d.getDate()+days); return d.toISOString().slice(0,10); })();
+  const customDateError = editing?.versioningMode === 'custom-week' && editing.effectiveFromDate ? (() => {
+    const d = new Date(editing.effectiveFromDate + 'T00:00:00');
+    if(isNaN(d.getTime())) return 'Invalid date';
+    return d.getDay() !== 1 ? 'Choose a Monday' : null;
+  })() : null;
 
   return (
-    <div className="space-y-6 relative">
-      {/* Toast container */}
-      <div className="fixed top-4 right-4 z-50 space-y-2">
-        {/* Local toast system removed in favor of global provider */}
-      </div>
-      <div className="flex flex-wrap gap-3 items-center">
-        <h2 className="text-lg font-semibold">Your weekly routine</h2>
-        <select aria-label="Filter routine by day" value={filterWeekday} onChange={e=>setFilterWeekday(e.target.value==='all'?'all':Number(e.target.value))} className="tt-input !w-auto">
-          <option value="all">All days</option>
-          {weekdayNames.map((n,i)=>(<option key={i} value={i+1}>{n}</option>))}
-        </select>
-        <label className="flex items-center gap-1 text-xs cursor-pointer select-none">
-          <input type="checkbox" checked={showFuture} onChange={e=>setShowFuture(e.target.checked)} />
-          <span>Show upcoming changes</span>
-        </label>
-  {editing && <Button variant="subtle" size="sm" onClick={reset} leftIcon={<IconClose className="w-3.5 h-3.5" />}>Cancel</Button>}
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <DayPicker className="min-w-0 flex-1 !mx-0 !px-0 sm:hidden" value={selectedDay} onChange={setSelectedDay} />
+        <p className="tt-text-muted hidden flex-1 text-sm sm:block">Blocks repeat every week.</p>
+        <Menu label="Routine options" items={[{ label:'Show upcoming changes', checked:showFuture, onSelect:() => setShowFuture(v => !v) }]} />
+        <Button className="max-sm:hidden" leftIcon={<IconAdd size={18} />} onClick={() => startCreate(selectedDay)}>Add block</Button>
       </div>
       {!editing && error && <ErrorState message={error} onRetry={loadAll} />}
-      {loading && <LoadingState label="Loading your routine…" />}
-      {!loading && displayWeekdays.map(wd => (
-        <div key={wd} className="tt-panel tt-panel-padding pt-3 pb-3">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-base font-semibold">{weekdayNames[wd-1]}</h3>
-            {!editing && (
-              <Button size="sm" variant="secondary" onClick={()=>startCreate(wd)} leftIcon={<IconAdd className="w-3.5 h-3.5" />} aria-label={'Add time block for ' + weekdayNames[wd-1]}>Add block</Button>
-            )}
-          </div>
-          <div className="space-y-2">
-            {grouped[wd].map(seg => {
-              const futureInfo = activeHasFuture[seg.id];
-              const futureStackFull = futureByWeekday[wd].filter(f => f.startMinute < seg.endMinute && f.endMinute > seg.startMinute);
-              const futureStack = showFuture ? futureStackFull : [];
-              const editDisabled = futureStackFull.length > 0;
-              const diff = diffSummary(seg, futureStackFull);
-              return (
-                <div key={seg.id} className="flex flex-col gap-1">
-                  <div className="flex flex-wrap items-center gap-2 text-xs border border-gray-200 dark:border-gray-700 rounded px-2 py-1 bg-white/70 dark:bg-gray-900/70">
-                    <span className="font-mono whitespace-nowrap">{minutesToHHMM(seg.startMinute)}-{minutesToHHMM(seg.endMinute)}</span>
-                    {seg.activity && <span className="px-1 rounded bg-gray-100 dark:bg-gray-800" style={{borderLeft: seg.activity.color ? '4px solid '+seg.activity.color : undefined}}>{seg.activity.name}</span>}
-                    {seg.notes && <span className="italic text-gray-500 truncate max-w-[120px] sm:max-w-[160px]">{seg.notes}</span>}
-                    {futureInfo && (
-                      <span className="text-xs px-1 rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300" title={`Future version scheduled for ${futureInfo.date}${diff? '\n'+diff:''}`}>Replaced {futureInfo.date}</span>
-                    )}
-                    <div className="ml-auto flex gap-1 items-center">
-                      <IconButton
-                        size="sm"
-                        variant="subtle"
-                        disabled={editDisabled}
-                        onClick={()=>!editDisabled && startEdit(seg)}
-                        icon={<IconEdit className="w-3.5 h-3.5" />}
-                        label="Edit segment"
-                        title={editDisabled ? 'An upcoming change already exists. Edit that upcoming block below.' : 'Edit time block'}
-                      />
-                      <IconButton
-                        size="sm"
-                        variant={pendingDeleteSegmentId===seg.id ? 'danger' : 'subtle'}
-                        onClick={()=>{ setError(null); setPendingDeleteSegmentId(seg.id); }}
-                        icon={<IconTrash className="w-3.5 h-3.5" />}
-                        label={pendingDeleteSegmentId===seg.id? 'Confirm delete' : 'Delete segment'}
-                        className={pendingDeleteSegmentId===seg.id ? 'animate-pulse' : ''}
-                      />
-                    </div>
-                  </div>
-                  {futureStack.length>0 && (
-                    <div className="ml-4 border-l border-dashed border-gray-300 dark:border-gray-700 pl-3 space-y-1">
-                      {futureStack.sort((a,b)=>a.startMinute-b.startMinute).map(f => (
-                        <div key={f.id} className="flex flex-wrap items-center gap-2 text-xs border border-indigo-200 dark:border-indigo-800 rounded px-2 py-1 bg-indigo-50 dark:bg-indigo-900/30" title={diffSummary(seg,[f]) || undefined}>
-                          <span className="font-mono">{minutesToHHMM(f.startMinute)}-{minutesToHHMM(f.endMinute)}</span>
-                          {f.activity && <span className="px-1 rounded bg-gray-100 dark:bg-gray-800" style={{borderLeft: f.activity.color ? '4px solid '+f.activity.color : undefined}}>{f.activity.name}</span>}
-                          <span className="text-indigo-700 dark:text-indigo-300">Future {new Date(f.effectiveFrom).toISOString().slice(0,10)}</span>
-                          <div className="ml-auto flex gap-1">
-                            <IconButton
-                              size="sm"
-                              variant="subtle"
-                              onClick={()=>startEdit(f)}
-                              icon={<IconEdit className="w-3 h-3" />}
-                              label="Edit future segment"
-                              className="hover:bg-indigo-100 dark:hover:bg-indigo-800/40"
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            {grouped[wd].length===0 && <div className="tt-text-muted py-3 text-sm">A little breathing room. Add a block when you have something planned.</div>}
-          </div>
-        </div>
-      ))}
-
-      <Dialog open={!!editing} onClose={reset} title={editing?.id ? 'Edit time block' : 'Add a time block'} description="This block repeats each week as part of your routine." busy={saving}>
-      {editing && <form onSubmit={submit} className="space-y-5">
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <label className="space-y-1 col-span-2">
-                <span className="tt-label">Weekday</span>
-                <select value={editing.weekday} onChange={e=>setEditing({...editing, weekday:Number(e.target.value)})} className="tt-input">
-                  {weekdayNames.map((n,i)=>(<option key={i} value={i+1}>{n}</option>))}
-                </select>
-              </label>
-              <label className="space-y-1">
-                <span className="tt-label">Start</span>
-                <input required type="time" value={editing.start} onChange={e=>setEditing({...editing, start:e.target.value})} className="tt-input" />
-              </label>
-              <label className="space-y-1">
-                <span className="tt-label">End</span>
-                <input required type="time" value={editing.end} onChange={e=>setEditing({...editing, end:e.target.value})} className="tt-input" />
-              </label>
-              <label className="space-y-1 col-span-2">
-                <span className="tt-label">Activity (optional)</span>
-                <select value={editing.activityId} onChange={e=>setEditing({...editing, activityId:e.target.value})} className="tt-input">
-                  <option value="">-- None --</option>
-                  {activities.map(a=> <option key={a.id} value={a.id}>{a.name}</option>)}
-                </select>
-              </label>
-              <label className="space-y-1 col-span-2">
-                <span className="tt-label">Notes</span>
-                <input maxLength={200} type="text" value={editing.notes} onChange={e=>setEditing({...editing, notes:e.target.value})} className="tt-input" placeholder="Optional notes" />
-              </label>
-              {editing.id && (
-                <div className="col-span-2 space-y-2 mt-1 border-t pt-2 border-gray-200 dark:border-gray-700">
-                  <span className="tt-label">When should this change apply?</span>
-                  <div className="space-y-1">
-                    <label className="flex items-center gap-2 cursor-pointer text-sm">
-                      <input type="radio" name="versioning" value="now" checked={(editing.versioningMode||'now')==='now'} onChange={()=>setEditing({...editing, versioningMode:'now'})} />
-                      <span>Update this block immediately</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer text-sm">
-                      <input type="radio" name="versioning" value="next-week" checked={editing.versioningMode==='next-week'} onChange={()=>setEditing({...editing, versioningMode:'next-week'})} />
-                      <span>Apply starting next week ({(() => { const d = new Date(); const jsDay=d.getDay(); const days=((8-jsDay)%7)||7; d.setDate(d.getDate()+days); return d.toISOString().slice(0,10); })()})</span>
-                    </label>
-                    <label className="flex items-start gap-2 cursor-pointer text-sm">
-                      <input type="radio" name="versioning" value="custom-week" checked={editing.versioningMode==='custom-week'} onChange={()=>setEditing({...editing, versioningMode:'custom-week'})} />
-                      <span className="flex flex-col gap-1">
-                        <span>Choose a future week (starting Monday)</span>
-                        {editing.versioningMode==='custom-week' && (
-                          <input type="date" aria-label="Start date for the schedule change" required value={editing.effectiveFromDate||''} onChange={e=>setEditing({...editing, effectiveFromDate:e.target.value})} className="border rounded p-1 dark:bg-gray-950 dark:border-gray-700 text-sm" />
-                        )}
-                      </span>
-                    </label>
-                    {editing.versioningMode==='custom-week' && editing.effectiveFromDate && (()=>{ const d=new Date(editing.effectiveFromDate+'T00:00:00'); if(isNaN(d.getTime())) return <p className="text-red-600 text-xs">Invalid date</p>; if(d.getDay()!==1) return <p className="text-red-600 text-xs">Date must be a Monday</p>; return null; })()}
-                    <p className="tt-text-muted text-sm">Choosing a future week preserves your earlier schedule.</p>
-                  </div>
-                </div>
-              )}
+      {loading ? <LoadingState label="Loading your routine…" /> : <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {[1,2,3,4,5,6,7].map(wd => (
+          <section key={wd} className={'space-y-1.5 ' + (wd === selectedDay ? '' : 'max-sm:hidden')}>
+            <div className="flex items-center justify-between gap-2 px-1">
+              <h3 className="text-sm font-semibold">{weekdayNames[wd-1]}</h3>
+              <Button variant="ghost" className="!min-h-8 !px-2 text-xs" leftIcon={<IconAdd size={14} />} onClick={()=>startCreate(wd)} aria-label={'Add time block for ' + weekdayNames[wd-1]}>Add</Button>
             </div>
+            <ul className="tt-list">
+              {grouped[wd].map(seg => {
+                const futureInfo = activeHasFuture[seg.id];
+                const futureStackFull = futureByWeekday[wd].filter(f => f.startMinute < seg.endMinute && f.endMinute > seg.startMinute);
+                const futureStack = showFuture ? futureStackFull : [];
+                const editDisabled = futureStackFull.length > 0;
+                const diff = diffSummary(seg, futureStackFull);
+                return (
+                  <li key={seg.id}>
+                    <div className="flex items-center pr-1">
+                      <button type="button" className="tt-row tt-row-button min-w-0 flex-1" disabled={editDisabled} onClick={()=>startEdit(seg)}
+                        title={editDisabled ? 'An upcoming change exists. Edit that one instead.' : undefined}>
+                        <span aria-hidden="true" className="h-8 w-1 shrink-0 rounded-full" style={{ background:seg.activity?.color || 'var(--line-strong)' }} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-medium">{seg.activity?.name || 'Open block'}</span>
+                          <span className="tt-text-muted block truncate text-xs tabular-nums">{minutesToHHMM(seg.startMinute)}–{minutesToHHMM(seg.endMinute)}{seg.notes ? ' · ' + seg.notes : ''}</span>
+                        </span>
+                        {futureInfo && <span className="tt-badge shrink-0" data-variant="blue" title={diff || undefined}>Changes {futureInfo.date.slice(5)}</span>}
+                      </button>
+                      <Menu label="Block options" items={[
+                        { label:'Edit', icon:<IconEdit size={17} />, disabled:editDisabled, onSelect:() => startEdit(seg) },
+                        { label:'Delete', icon:<IconTrash size={17} />, danger:true, onSelect:() => { setError(null); setPendingDeleteSegmentId(seg.id); } }
+                      ]} />
+                    </div>
+                    {futureStack.sort((a,b)=>a.startMinute-b.startMinute).map(f => (
+                      <button key={f.id} type="button" onClick={()=>startEdit(f)} title={diffSummary(seg,[f]) || undefined}
+                        className="flex w-full items-center gap-3 border-t border-dashed border-[var(--line)] bg-[var(--accent-soft)] py-2 pl-8 pr-4 text-left text-xs">
+                        <span className="font-semibold text-[var(--accent-ink)]">From {new Date(f.effectiveFrom).toISOString().slice(0,10)}</span>
+                        <span className="tt-text-muted min-w-0 flex-1 truncate tabular-nums">{minutesToHHMM(f.startMinute)}–{minutesToHHMM(f.endMinute)} · {f.activity?.name || 'Open block'}</span>
+                        <IconEdit size={14} className="shrink-0 opacity-70" />
+                      </button>
+                    ))}
+                  </li>
+                );
+              })}
+              {grouped[wd].length===0 && <li className="tt-text-muted px-4 py-3 text-sm">No blocks.</li>}
+            </ul>
+          </section>
+        ))}
+      </div>}
+      <button type="button" className="tt-fab sm:hidden" aria-label="Add block" onClick={() => startCreate(selectedDay)}><IconAdd size={24} /></button>
+
+      <Dialog open={!!editing} onClose={reset} title={editing?.id ? 'Edit block' : 'New block'} busy={saving}>
+      {editing && <form onSubmit={submit} className="space-y-4">
+            <label className="block">
+              <span className="tt-label">Day</span>
+              <select value={editing.weekday} onChange={e=>setEditing({...editing, weekday:Number(e.target.value)})} className="tt-input">
+                {weekdayNames.map((n,i)=>(<option key={i} value={i+1}>{n}</option>))}
+              </select>
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label><span className="tt-label">Start</span><input required type="time" value={editing.start} onChange={e=>setEditing({...editing, start:e.target.value})} className="tt-input" /></label>
+              <label><span className="tt-label">End</span><input required type="time" value={editing.end} onChange={e=>setEditing({...editing, end:e.target.value})} className="tt-input" /></label>
+            </div>
+            <label className="block">
+              <span className="tt-label">Activity</span>
+              <select value={editing.activityId} onChange={e=>setEditing({...editing, activityId:e.target.value})} className="tt-input">
+                <option value="">Open block (no activity)</option>
+                {activities.map(a=> <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className="tt-label">Note</span>
+              <input maxLength={200} type="text" value={editing.notes} onChange={e=>setEditing({...editing, notes:e.target.value})} className="tt-input" placeholder="Optional" />
+            </label>
+            {editing.id && (
+              <fieldset className="space-y-1 border-t border-[var(--line)] pt-3">
+                <legend className="tt-label pt-3">Apply change</legend>
+                <label className="tt-check !min-h-10"><input type="radio" name="versioning" value="now" checked={(editing.versioningMode||'now')==='now'} onChange={()=>setEditing({...editing, versioningMode:'now'})} />Now</label>
+                <label className="tt-check !min-h-10"><input type="radio" name="versioning" value="next-week" checked={editing.versioningMode==='next-week'} onChange={()=>setEditing({...editing, versioningMode:'next-week'})} />From next week ({nextMonday})</label>
+                <label className="tt-check !min-h-10"><input type="radio" name="versioning" value="custom-week" checked={editing.versioningMode==='custom-week'} onChange={()=>setEditing({...editing, versioningMode:'custom-week'})} />From a chosen Monday</label>
+                {editing.versioningMode==='custom-week' && <div className="pl-7">
+                  <input type="date" aria-label="Start date for the schedule change" required value={editing.effectiveFromDate||''} onChange={e=>setEditing({...editing, effectiveFromDate:e.target.value})} className="tt-input" aria-invalid={!!customDateError} />
+                  {customDateError && <p className="mt-1 text-xs text-red-600 dark:text-red-300">{customDateError}</p>}
+                </div>}
+              </fieldset>
+            )}
             {error && <ErrorState message={error} />}
-            <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="subtle" size="sm" disabled={saving} onClick={reset} leftIcon={<IconClose className="w-3.5 h-3.5" />}>Cancel</Button>
-              <Button type="submit" variant="primary" size="sm" disabled={saving} leftIcon={<IconSave className="w-3.5 h-3.5" />} loading={saving}>{saving ? 'Saving' : 'Save'}</Button>
+            <div className="flex gap-2 pt-1 sm:justify-end">
+              <Button variant="secondary" className="flex-1 sm:flex-none" disabled={saving} onClick={reset}>Cancel</Button>
+              <Button type="submit" className="flex-1 sm:flex-none" loading={saving}>Save</Button>
             </div>
         </form>}
       </Dialog>
-      <Dialog open={!!pendingDeleteSegmentId} onClose={() => setPendingDeleteSegmentId(null)} title="Delete this time block?" busy={saving}>
-        <p className="tt-text-muted">This removes the block from your routine. Your saved time entries will be kept.</p>
-        {error && <ErrorState message={error} />}
-        <div className="mt-6 flex justify-end gap-3"><Button disabled={saving} variant="secondary" onClick={() => setPendingDeleteSegmentId(null)}>Keep block</Button><Button variant="danger" loading={saving} onClick={() => pendingDeleteSegmentId && remove(pendingDeleteSegmentId)}>Delete block</Button></div>
+      <Dialog open={!!pendingDeleteSegmentId} onClose={() => setPendingDeleteSegmentId(null)} title="Delete block?" busy={saving}>
+        <p className="tt-text-muted">It is removed from your routine. Logged time is kept.</p>
+        {error && <div className="mt-4"><ErrorState message={error} /></div>}
+        <div className="mt-5 flex gap-2 sm:justify-end">
+          <Button disabled={saving} variant="secondary" className="flex-1 sm:flex-none" onClick={() => setPendingDeleteSegmentId(null)}>Cancel</Button>
+          <Button variant="danger" className="flex-1 sm:flex-none" loading={saving} onClick={() => pendingDeleteSegmentId && remove(pendingDeleteSegmentId)}>Delete</Button>
+        </div>
       </Dialog>
     </div>
   );

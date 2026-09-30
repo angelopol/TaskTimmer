@@ -37,10 +37,6 @@ export const IconCalendar = createIcon(<>
   <line x1="3" y1="10" x2="21" y2="10" />
 </>, 'IconCalendar');
 
-export const IconPlus = createIcon(<line x1="12" y1="5" x2="12" y2="19" />, 'IconPlus');
-IconPlus.displayName = 'IconPlus';
-// Add missing horizontal line for plus
-// We'll redefine to include both lines
 export const IconAdd = createIcon(<>
   <line x1="12" y1="5" x2="12" y2="19" />
   <line x1="5" y1="12" x2="19" y2="12" />
@@ -135,6 +131,42 @@ export const IconLog = createIcon(<>
   <path d="M7 14h6" />
 </>, 'IconLog');
 
+export const IconMore = createIcon(<>
+  <circle cx="12" cy="5" r="1" />
+  <circle cx="12" cy="12" r="1" />
+  <circle cx="12" cy="19" r="1" />
+</>, 'IconMore');
+
+export const IconHome = createIcon(<>
+  <path d="M3 10.5 12 3l9 7.5" />
+  <path d="M5 9v11a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9" />
+</>, 'IconHome');
+
+export const IconLogout = createIcon(<>
+  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+  <polyline points="16 17 21 12 16 7" />
+  <line x1="21" y1="12" x2="9" y2="12" />
+</>, 'IconLogout');
+
+export const IconList = createIcon(<>
+  <path d="M8 6h13" />
+  <path d="M8 12h13" />
+  <path d="M8 18h13" />
+  <path d="M3 6h.01" />
+  <path d="M3 12h.01" />
+  <path d="M3 18h.01" />
+</>, 'IconList');
+
+export const IconCheck =createIcon(<polyline points="20 6 9 17 4 12" />, 'IconCheck');
+
+export const IconSearch = createIcon(<>
+  <circle cx="11" cy="11" r="7" />
+  <path d="m20 20-3.5-3.5" />
+</>, 'IconSearch');
+
+export const IconPlay = createIcon(<path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5Z" />, 'IconPlay');
+export const IconStop = createIcon(<rect x="6" y="6" width="12" height="12" rx="2" />, 'IconStop');
+
 // Utility mapping if needed later
 export const icons = {
   calendar: IconCalendar,
@@ -155,6 +187,13 @@ export const icons = {
   segment: IconSegment,
   activity: IconActivity,
   log: IconLog,
+  more: IconMore,
+  home: IconHome,
+  logout: IconLogout,
+  check: IconCheck,
+  search: IconSearch,
+  play: IconPlay,
+  stop: IconStop,
 };
 
 export type IconName = keyof typeof icons;

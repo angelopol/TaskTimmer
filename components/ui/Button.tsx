@@ -4,14 +4,14 @@ import React from 'react';
 type Variant = 'primary' | 'secondary' | 'danger' | 'subtle' | 'ghost';
 type Size = 'sm' | 'md';
 const variants: Record<Variant, string> = {
-  primary: 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm',
-  secondary: 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700',
-  danger: 'bg-red-700 text-white hover:bg-red-800',
-  subtle: 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700',
-  ghost: 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+  primary: 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm shadow-indigo-600/20',
+  secondary: 'border border-[var(--line-strong)] bg-[var(--surface)] text-[var(--ink)] hover:bg-[var(--surface-2)]',
+  danger: 'bg-red-600 text-white hover:bg-red-700',
+  subtle: 'bg-[var(--surface-2)] text-[var(--ink)] hover:bg-[var(--line)]',
+  ghost: 'text-[var(--muted)] hover:bg-[var(--surface-2)] hover:text-[var(--ink)]'
 };
 export function buttonStyles(variant: Variant = 'primary', size: Size = 'sm') {
-  return 'inline-flex min-h-11 items-center justify-center rounded-xl font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ' +
+  return 'inline-flex min-h-11 items-center justify-center rounded-xl font-semibold transition-[background-color,color,transform] active:scale-[.97] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 ' +
     (size === 'md' ? 'px-5 py-3 text-sm gap-2 ' : 'px-3.5 py-2 text-sm gap-2 ') + variants[variant];
 }
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -27,7 +27,6 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
   </button>;
 });
 export interface IconButtonProps extends Omit<ButtonProps, 'children' | 'leftIcon' | 'rightIcon'> { icon: React.ReactNode; label: string; }
-export function IconButton({ icon, label, className = '', ...props }: IconButtonProps) {
-  return <Button {...props} aria-label={label} title={label} className={'w-11 shrink-0 !px-0 ' + className}>{icon}</Button>;
-}
-
+export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton({ icon, label, className = '', ...props }, ref) {
+  return <Button ref={ref} {...props} aria-label={label} title={props.title ?? label} className={'w-11 shrink-0 !px-0 ' + className}>{icon}</Button>;
+});
