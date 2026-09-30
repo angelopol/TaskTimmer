@@ -1,15 +1,17 @@
 "use client";
 import React, { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useApiClient } from '../useApiClient';
 import { useToast } from '../toast/ToastProvider';
 import { Dialog } from '../ui/Dialog';
 import { Button, IconButton } from '../ui/Button';
 import { ErrorState, LoadingState } from '../ui/Feedback';
 import { IconBell, IconCopy } from '../ui/icons';
+import { setPendingToken } from './tokenHandoff';
 
 interface Status { connected:boolean; prefix:string | null; createdAt:string | null; lastUsedAt:string | null; lastSyncedAt:string | null; stored:number; }
 
-function CopyField({ label, value }: { label:string; value:string }) {
+export function CopyField({ label, value }: { label:string; value:string }) {
   const { addToast } = useToast();
   return <div>
     <span className="tt-label">{label}</span>
@@ -43,14 +45,14 @@ export function RemindersDialog({ open, onClose }: { open:boolean; onClose:()=>v
     const res = await apiFetch<{ token:string }>('/api/integrations/reminders', { method:'POST' });
     setBusy(false);
     if (!res.ok || !res.data) { setError(res.error || 'Could not create a token.'); return; }
-    setToken(res.data.token); load();
+    setToken(res.data.token); setPendingToken(res.data.token); load();
   }
   async function disconnect() {
     setBusy(true);
     const res = await apiFetch('/api/integrations/reminders', { method:'DELETE' });
     setBusy(false); setConfirming(false);
     if (!res.ok) { setError(res.error || 'Could not disconnect.'); return; }
-    setToken(null); load();
+    setToken(null); setPendingToken(null); load();
     window.dispatchEvent(new Event('reminders:changed'));
     addToast({ type:'success', message:'Apple Reminders disconnected.' });
   }
@@ -69,11 +71,7 @@ export function RemindersDialog({ open, onClose }: { open:boolean; onClose:()=>v
         <p className="tt-badge" data-variant="amber">Copy this token now. It will not be shown again.</p>
         <CopyField label="Token" value={token} />
         <CopyField label="URL" value={endpoint} />
-        <ol className="tt-text-muted list-decimal space-y-1 pl-5 text-sm">
-          <li>In Shortcuts, build the “TaskTimmer Reminders” shortcut (see the setup guide).</li>
-          <li>Paste the URL and the token into “Get contents of URL”.</li>
-          <li>Create a daily “Time of day” automation set to run immediately.</li>
-        </ol>
+        <p className="tt-text-muted text-sm">Next: build the Shortcut and its daily automation. The guide keeps this token while it is open.</p>
       </div> : status?.connected && <p className="tt-text-muted text-sm">Token <code className="font-mono">{status.prefix}-••••-••••-••••</code> · created {when(status.createdAt)} · last used {when(status.lastUsedAt)}</p>}
       {confirming ? <div className="tt-error flex flex-wrap items-center gap-2">
         <p className="min-w-0 flex-1">Revoke the token and remove the synced reminders?</p>
@@ -84,6 +82,9 @@ export function RemindersDialog({ open, onClose }: { open:boolean; onClose:()=>v
         <Button className="flex-1 sm:flex-none" loading={busy} onClick={generate}>{status.connected ? 'New token' : 'Connect'}</Button>
       </div>}
       {status?.connected && !token && <p className="tt-text-muted text-xs">A new token replaces the current one; update it in your Shortcut.</p>}
+      <Link href="/integrations/reminders" onClick={onClose} className="flex min-h-11 items-center justify-center rounded-xl text-sm font-semibold text-indigo-600 hover:bg-[var(--surface-2)] dark:text-indigo-300">
+        Open setup guide →
+      </Link>
     </div>}
   </Dialog>;
 }

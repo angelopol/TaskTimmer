@@ -8,6 +8,10 @@ que borres o completes en Recordatorios se refleja en el siguiente envío.
 - iOS / iPadOS 16 o superior (para que la automatización se ejecute sin preguntar).
 - Basta con **un** dispositivo ejecutando la automatización (recomendado: el iPhone).
 
+> **Guía rápida en la app:** abre TaskTimmer en el iPhone → avatar → **Apple Reminders** → **Open setup guide**
+> (ruta `/integrations/reminders`). Tiene los mismos pasos con botones para copiar cada valor y el token ya rellenado.
+> Este documento es la versión completa, con solución de problemas y referencia de la API.
+
 ---
 
 ## 1. Obtener el token en TaskTimmer
