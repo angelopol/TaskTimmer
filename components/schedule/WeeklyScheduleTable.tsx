@@ -1,11 +1,11 @@
 "use client";
-import React, { useEffect, useMemo, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { Dialog } from '../ui/Dialog';
 import { ErrorState, LoadingState, EmptyState } from '../ui/Feedback';
 import { Button } from '../ui/Button';
 import { Menu } from '../ui/Menu';
 import { DayPicker } from '../ui/DayPicker';
-import { IconAdd, IconBell, IconCalendar, IconEdit, IconList, IconSegment, IconTrash } from '../ui/icons';
+import { IconAdd, IconBell, IconCalendar, IconChevronLeft, IconChevronRight, IconEdit, IconList, IconSegment, IconTrash } from '../ui/icons';
 import { minutesToHHMM, WEEKDAY_NAMES_LONG, WEEKDAY_NAMES_SHORT, combineDateAndTime, fmtMinutes, fmtHoursMinutes } from '../../lib/time';
 import { useWeek } from '../week/WeekContext';
 import { useToast } from '../toast/ToastProvider';
@@ -29,7 +29,7 @@ type Source = typeof SOURCES[number];
 export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void }){
   const [view, setView] = useState<'agenda' | 'grid'>('agenda');
   const [retry, setRetry] = useState(0);
-  const { weekStart } = useWeek();
+  const { weekStart, gotoNextWeek, gotoPrevWeek } = useWeek();
   const { unit } = useUnit();
   const [selectedDay, setSelectedDay] = useState(() => new Date().getDay() || 7);
   const todayISO = (() => { const d = new Date(); return [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-'); })();
@@ -671,6 +671,53 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
 
   const fmt = (n:number) => unit === 'min' ? fmtMinutes(n) : fmtHoursMinutes(n);
   const reminders = useWeekReminders(weekStart);
+
+  /** Moves the selected day; stepping past Sunday opens next week's Monday, and before Monday last week's Sunday. */
+  const shiftDay = useCallback((delta:number) => {
+    const next = selectedDay + delta;
+    if(next > 7){ gotoNextWeek(); setSelectedDay(1); }
+    else if(next < 1){ gotoPrevWeek(); setSelectedDay(7); }
+    else setSelectedDay(next);
+  }, [selectedDay, gotoNextWeek, gotoPrevWeek]);
+
+  // Phone carousel (Day by day): children are [previous-week edge, Mon … Sun, next-week edge].
+  const carousel = useRef<HTMLDivElement>(null);
+  const settleTimer = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const el = carousel.current;
+    if(!el || getComputedStyle(el).display !== 'flex') return; // grid layout on larger screens
+    const target = el.children[selectedDay] as HTMLElement | undefined;
+    if(!target || Math.abs(el.scrollLeft - target.offsetLeft) < 2) return;
+    // First placement after mounting (or a week change, which remounts) jumps; taps on the day picker glide.
+    el.scrollTo({ left:target.offsetLeft, behavior:el.dataset.placed ? 'smooth' : 'auto' });
+    el.dataset.placed = '1';
+  }, [selectedDay, weekStart, view, loading]);
+  function onCarouselScroll(){
+    window.clearTimeout(settleTimer.current);
+    settleTimer.current = window.setTimeout(() => {
+      const el = carousel.current;
+      if(!el || !el.clientWidth) return;
+      el.dataset.placed = '1';
+      const index = Math.round(el.scrollLeft / el.clientWidth);
+      if(index <= 0 || index >= 8) delete el.dataset.placed; // crossing weeks: land on the new day without gliding
+      if(index <= 0) shiftDay(-selectedDay);          // previous-week edge → last Sunday
+      else if(index >= 8) shiftDay(8 - selectedDay);  // next-week edge → next Monday
+      else if(index !== selectedDay) setSelectedDay(index);
+    }, 90);
+  }
+  useEffect(() => () => window.clearTimeout(settleTimer.current), []);
+
+  // Time grid on phones shows one day: a horizontal swipe changes it (same week rules as the carousel).
+  const swipeStart = useRef<{ x:number; y:number } | null>(null);
+  const gridSwipe = {
+    onTouchStart:(e:React.TouchEvent) => { const t = e.touches[0]; swipeStart.current = { x:t.clientX, y:t.clientY }; },
+    onTouchEnd:(e:React.TouchEvent) => {
+      const start = swipeStart.current; swipeStart.current = null;
+      if(!start || window.innerWidth >= 640) return;
+      const t = e.changedTouches[0], dx = t.clientX - start.x, dy = t.clientY - start.y;
+      if(Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) shiftDay(dx < 0 ? 1 : -1);
+    }
+  };
   /** Read-only Apple Reminders of `weekday` due in [start, end). All-day ones only count for a whole-day range. */
   function remindersIn(weekday:number, start:number, end:number): DayReminder[] {
     const list = reminders.byDay[weekDateForWeekday(weekday)] || [];
@@ -948,11 +995,13 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
         </summary>
         <div className="px-3 pb-3"><ReminderList reminders={reminders.noDate} /></div>
       </details>}
-      {!loading && !error && view === 'agenda' && <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {!loading && !error && view === 'agenda' && <div ref={carousel} onScroll={onCarouselScroll} className="tt-daycarousel" aria-label="Days of the week">
+        <div aria-hidden="true" className="tt-daycarousel-edge"><IconChevronLeft size={18} />Previous week</div>
         {WEEKDAY_NAMES_LONG.map((day, index) => {
           const blocks = [...byDay[index+1]].sort((a,b)=>a.startMinute-b.startMinute);
-          if(!segments.length && !reminders.hasAny && index+1 !== selectedDay) return null;
-          return <section key={day} className={'space-y-1.5 ' + (index+1 === selectedDay ? '' : 'max-sm:hidden')}>
+          // Without a routine, larger screens only show the chosen day; phones keep all 7 so swiping works.
+          const desktopHidden = !segments.length && !reminders.hasAny && index+1 !== selectedDay;
+          return <section key={day} aria-current={index+1 === selectedDay ? 'date' : undefined} className={'space-y-1.5 ' + (desktopHidden ? 'sm:hidden' : '')}>
             <div className="flex items-baseline justify-between gap-2 px-1">
               <h3 className="text-sm font-semibold">{day} <span className="tt-text-muted font-normal">{new Date(weekDates[index]+'T12:00:00').toLocaleDateString(undefined, { day:'numeric', month:'short' })}</span></h3>
               <Button variant="ghost" className="!min-h-8 !px-2 text-xs" leftIcon={<IconAdd size={14} />}
@@ -977,9 +1026,10 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
             <ReminderList reminders={reminders.byDay[weekDates[index]] || []} />
           </section>;
         })}
+        <div aria-hidden="true" className="tt-daycarousel-edge">Next week<IconChevronRight size={18} /></div>
       </div>}
       {!loading && !error && view === 'grid' && showGrid && (
-        <div role="region" aria-label="Weekly time grid" tabIndex={0} className="tt-panel max-h-[calc(100dvh-240px)] overflow-auto sm:max-h-[calc(100dvh-220px)]">
+        <div role="region" aria-label="Weekly time grid" tabIndex={0} {...gridSwipe} className="tt-panel max-h-[calc(100dvh-240px)] overflow-auto sm:max-h-[calc(100dvh-220px)]">
           <table className="tt-grid sm:min-w-[860px]"><caption className="sr-only">Weekly schedule. Choose a time block to record time.</caption>
             <thead>
               <tr>
