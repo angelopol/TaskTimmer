@@ -7,7 +7,7 @@ import { useTheme } from './ThemeProvider';
 import { useUnit } from './UnitProvider';
 import { Menu } from './ui/Menu';
 import { RemindersDialog } from './reminders/RemindersDialog';
-import { IconBell, IconCalendar, IconChevronLeft, IconClock, IconHome, IconLayers, IconLog, IconLogout, IconMoon, IconSun } from './ui/icons';
+import { IconBell, IconCalendar, IconChevronLeft, IconClock, IconDevice, IconHome, IconLayers, IconLog, IconLogout, IconMoon, IconSun } from './ui/icons';
 
 const links = [
   { href:'/', label:'Overview', icon:IconHome },
@@ -21,7 +21,7 @@ const isActive = (pathname:string, href:string) => href === '/' ? pathname === '
 
 function AccountMenu() {
   const { data:session } = useSession();
-  const { theme, setTheme } = useTheme();
+  const { preference, setTheme } = useTheme();
   const { unit, setUnit } = useUnit();
   const name = session?.user?.name || 'Account';
   const [reminders, setReminders] = useState(false);
@@ -31,8 +31,9 @@ function AccountMenu() {
     items={[
       'separator',
       { heading:'Theme' },
-      { label:'Light', icon:<IconSun size={18} />, checked:theme === 'light', onSelect:() => setTheme('light') },
-      { label:'Dark', icon:<IconMoon size={18} />, checked:theme === 'dark', onSelect:() => setTheme('dark') },
+      { label:'System default', icon:<IconDevice size={18} />, checked:preference === 'system', onSelect:() => setTheme('system') },
+      { label:'Light', icon:<IconSun size={18} />, checked:preference === 'light', onSelect:() => setTheme('light') },
+      { label:'Dark', icon:<IconMoon size={18} />, checked:preference === 'dark', onSelect:() => setTheme('dark') },
       { heading:'Show time in' },
       { label:'Hours', icon:<span className="text-xs font-bold">h</span>, checked:unit === 'hr', onSelect:() => setUnit('hr') },
       { label:'Minutes', icon:<span className="text-xs font-bold">m</span>, checked:unit === 'min', onSelect:() => setUnit('min') },
