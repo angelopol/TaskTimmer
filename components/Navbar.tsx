@@ -7,6 +7,7 @@ import { useTheme } from './ThemeProvider';
 import { useUnit } from './UnitProvider';
 import { Menu } from './ui/Menu';
 import { RemindersDialog } from './reminders/RemindersDialog';
+import { IdeaMapDialog } from './ideamap/IdeaMapDialog';
 import { IconBell, IconCalendar, IconChevronLeft, IconClock, IconDevice, IconHome, IconLayers, IconLog, IconLogout, IconMoon, IconSun } from './ui/icons';
 
 const links = [
@@ -25,6 +26,7 @@ function AccountMenu() {
   const { unit, setUnit } = useUnit();
   const name = session?.user?.name || 'Account';
   const [reminders, setReminders] = useState(false);
+  const [ideamap, setIdeamap] = useState(false);
   return <><Menu label="Account and settings" triggerClassName="!min-h-10 !w-10 !rounded-full !p-0"
     trigger={<span aria-hidden="true" className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 text-sm font-bold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-200">{name.trim().charAt(0).toUpperCase()}</span>}
     header={<div className="px-3 pb-2 pt-2"><p className="truncate font-semibold">{name}</p>{session?.user?.email && <p className="tt-text-muted truncate text-xs">{session.user.email}</p>}</div>}
@@ -38,10 +40,14 @@ function AccountMenu() {
       { label:'Hours', icon:<span className="text-xs font-bold">h</span>, checked:unit === 'hr', onSelect:() => setUnit('hr') },
       { label:'Minutes', icon:<span className="text-xs font-bold">m</span>, checked:unit === 'min', onSelect:() => setUnit('min') },
       'separator',
+      { heading:'Integrations' },
       { label:'Apple Reminders', icon:<IconBell size={18} />, onSelect:() => setReminders(true) },
+      { label:'IdeaMap', icon:<IconLayers size={18} />, onSelect:() => setIdeamap(true) },
+      'separator',
       { label:'Sign out', icon:<IconLogout size={18} />, danger:true, onSelect:() => signOut({ callbackUrl:'/login' }) }
     ]} />
-    <RemindersDialog open={reminders} onClose={() => setReminders(false)} /></>;
+    <RemindersDialog open={reminders} onClose={() => setReminders(false)} />
+    <IdeaMapDialog open={ideamap} onClose={() => setIdeamap(false)} /></>;
 }
 
 export function Navbar() {

@@ -13,6 +13,8 @@ import { useUnit } from '../UnitProvider';
 import { WeekNav } from '../week/WeekNav';
 import { useWeekReminders, type DayReminder } from '../reminders/useWeekReminders';
 import { ReminderList } from '../reminders/ReminderList';
+import { useIdeaMapTasks } from '../ideamap/useIdeaMapTasks';
+import { IdeaMapBadge, IdeaMapTaskList } from '../ideamap/IdeaMapTaskList';
 
 interface Activity { id: string; name: string; color: string | null; }
 interface Segment { id: string; weekday: number; startMinute: number; endMinute: number; activityId: string | null; activity?: Activity | null; }
@@ -671,6 +673,20 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
 
   const fmt = (n:number) => unit === 'min' ? fmtMinutes(n) : fmtHoursMinutes(n);
   const reminders = useWeekReminders(weekStart);
+  const ideamap = useIdeaMapTasks(weekStart);
+
+  // Result of the IdeaMap consent flow (/schedule?ideamap=connected|denied|error).
+  useEffect(() => {
+    const result = new URLSearchParams(window.location.search).get('ideamap');
+    if (!result) return;
+    const messages: Record<string, { type:'success' | 'error'; message:string }> = {
+      connected:{ type:'success', message:'IdeaMap connected. Your assigned tasks now appear in your week.' },
+      denied:{ type:'error', message:'IdeaMap connection was cancelled.' },
+      error:{ type:'error', message:'Could not connect IdeaMap. Please try again.' }
+    };
+    addToast(messages[result] || messages.error);
+    window.history.replaceState(null, '', window.location.pathname);
+  }, [addToast]);
 
   /** Moves the selected day; stepping past Sunday opens next week's Monday, and before Monday last week's Sunday. */
   const shiftDay = useCallback((delta:number) => {
@@ -995,12 +1011,21 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
         </summary>
         <div className="px-3 pb-3"><ReminderList reminders={reminders.noDate} /></div>
       </details>}
+      {!loading && ideamap.error && <p role="status" className="tt-badge !whitespace-normal !rounded-xl" data-variant="amber">IdeaMap: {ideamap.error}</p>}
+      {!loading && ideamap.unscheduled.length > 0 && <details className="group tt-panel">
+        <summary className="flex min-h-11 list-none items-center gap-2 px-4 text-sm font-semibold [&::-webkit-details-marker]:hidden">
+          <IdeaMapBadge />
+          {ideamap.unscheduled.length} IdeaMap task{ideamap.unscheduled.length === 1 ? '' : 's'} without a date or overdue
+          <span className="tt-text-muted ml-auto text-xs font-normal group-open:hidden">Show</span><span className="tt-text-muted ml-auto hidden text-xs font-normal group-open:inline">Hide</span>
+        </summary>
+        <div className="px-3 pb-3"><IdeaMapTaskList tasks={ideamap.unscheduled} setStatus={ideamap.setStatus} showDate /></div>
+      </details>}
       {!loading && !error && view === 'agenda' && <div ref={carousel} onScroll={onCarouselScroll} className="tt-daycarousel" aria-label="Days of the week">
         <div aria-hidden="true" className="tt-daycarousel-edge"><IconChevronLeft size={18} />Previous week</div>
         {WEEKDAY_NAMES_LONG.map((day, index) => {
           const blocks = [...byDay[index+1]].sort((a,b)=>a.startMinute-b.startMinute);
           // Without a routine, larger screens only show the chosen day; phones keep all 7 so swiping works.
-          const desktopHidden = !segments.length && !reminders.hasAny && index+1 !== selectedDay;
+          const desktopHidden = !segments.length && !reminders.hasAny && !Object.keys(ideamap.byDay).length && index+1 !== selectedDay;
           return <section key={day} aria-current={index+1 === selectedDay ? 'date' : undefined} className={'space-y-1.5 ' + (desktopHidden ? 'sm:hidden' : '')}>
             <div className="flex items-baseline justify-between gap-2 px-1">
               <h3 className="text-sm font-semibold">{day} <span className="tt-text-muted font-normal">{new Date(weekDates[index]+'T12:00:00').toLocaleDateString(undefined, { day:'numeric', month:'short' })}</span></h3>
@@ -1024,6 +1049,7 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
               {!blocks.length && <li className="tt-text-muted px-4 py-3 text-sm">No blocks planned.</li>}
             </ul>
             <ReminderList reminders={reminders.byDay[weekDates[index]] || []} />
+            <IdeaMapTaskList tasks={ideamap.byDay[weekDates[index]] || []} setStatus={ideamap.setStatus} />
           </section>;
         })}
         <div aria-hidden="true" className="tt-daycarousel-edge">Next week<IconChevronRight size={18} /></div>
@@ -1039,6 +1065,9 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
                     {d} <span className="font-normal">{Number(weekDates[i].slice(8))}</span>
                     {(reminders.byDay[weekDates[i]]?.length || 0) > 0 && <span className="ml-1.5 inline-flex items-center gap-0.5 text-[11px] text-amber-700 dark:text-amber-300" title={reminders.byDay[weekDates[i]].map(r => (r.minute === null ? 'All day' : minutesToHHMM(r.minute)) + ' ' + r.title).join('\n')}>
                       <IconBell size={11} />{reminders.byDay[weekDates[i]].length}
+                    </span>}
+                    {(ideamap.byDay[weekDates[i]]?.some(t => t.status !== 'done')) && <span className="ml-1.5 inline-flex items-center gap-0.5 text-[11px] font-normal" title={ideamap.byDay[weekDates[i]].filter(t => t.status !== 'done').map(t => t.title + ' (' + t.project.name + ')').join('\n')}>
+                      <IdeaMapBadge />{ideamap.byDay[weekDates[i]].filter(t => t.status !== 'done').length}
                     </span>}
                   </th>
                 ))}
