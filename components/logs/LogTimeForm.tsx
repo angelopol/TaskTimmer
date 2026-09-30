@@ -135,12 +135,13 @@ export default function LogTimeForm() {
     <CurrentActivityBar />
     <section aria-labelledby="entries-title" className="space-y-3">
       <h2 id="entries-title" className="sr-only">Saved entries</h2>
-      <WeekNav onChange={() => setOffset(0)} className="sm:max-w-sm" />
-      <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <WeekNav onChange={() => setOffset(0)} className="sm:w-80 sm:shrink-0" />
+      <div className="flex min-w-0 flex-1 items-center gap-2">
         <label className="min-w-0 flex-1 sm:max-w-xs"><span className="sr-only">Filter by activity</span>
-          <select className="tt-input tt-input-sm" value={filter} onChange={e => { setOffset(0); setFilter(e.target.value); }}><option value="">All activities</option>{activities.map(activity => <option key={activity.id} value={activity.id}>{activity.name}</option>)}</select>
+          <select className="tt-input tt-input-sm sm:!min-h-11" value={filter} onChange={e => { setOffset(0); setFilter(e.target.value); }}><option value="">All activities</option>{activities.map(activity => <option key={activity.id} value={activity.id}>{activity.name}</option>)}</select>
         </label>
-        <Menu label="Filter and sort" triggerClassName="!min-h-9 !px-3"
+        <Menu label="Filter and sort" triggerClassName="!min-h-9 !px-3 sm:!min-h-11"
           trigger={<span className="relative flex items-center gap-1.5"><IconFilter size={17} /><span className="max-sm:sr-only">Filters</span>{sourceFilter && <span className="absolute -right-1.5 -top-1 h-2 w-2 rounded-full bg-indigo-600" />}</span>}
           items={[
             { heading:'Type of time' },
@@ -151,6 +152,7 @@ export default function LogTimeForm() {
             { label:'Oldest first', checked:order === 'asc', onSelect:() => { setOffset(0); setOrder('asc'); } }
           ]} />
         {!loading && !error && total > 0 && <span className="tt-text-muted ml-auto shrink-0 text-xs" role="status">{total} {total === 1 ? 'entry' : 'entries'}</span>}
+      </div>
       </div>
       {loading ? <LoadingState label="Loading time entries…" /> : error ? <ErrorState message={error} onRetry={reload} /> : !logs.length ?
         <EmptyState title={filtered ? 'No matching entries' : 'Nothing logged this week'} icon={<IconLog size={24} />}>
