@@ -4,7 +4,7 @@ import { useApiClient } from '../useApiClient';
 
 export interface Reminder {
   id: string; title: string; notes: string | null; list: string | null;
-  dueAt: string; allDay: boolean; completed: boolean; flagged: boolean; priority: number;
+  dueAt: string | null; allDay: boolean; completed: boolean; flagged: boolean; priority: number;
 }
 export interface DayReminder extends Reminder { day: string; minute: number | null }
 
@@ -12,7 +12,7 @@ const pad = (n: number) => String(n).padStart(2, '0');
 const localISO = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 /** Calendar day of a reminder. Date-only reminders are stored at 12:00 UTC, so their UTC date is the real one. */
-export function reminderDay(r: Reminder) {
+export function reminderDay(r: Reminder & { dueAt: string }) {
   const due = new Date(r.dueAt);
   if (r.allDay && due.getUTCHours() === 12 && due.getUTCMinutes() === 0) return due.toISOString().slice(0, 10);
   return localISO(due);
@@ -22,6 +22,7 @@ export function reminderDay(r: Reminder) {
 export function useWeekReminders(weekStart: string) {
   const { apiFetch } = useApiClient();
   const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [undated, setUndated] = useState<Reminder[]>([]);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
   const reload = useCallback(() => setVersion(v => v + 1), []);
@@ -29,9 +30,9 @@ export function useWeekReminders(weekStart: string) {
     let active = true;
     const [y, m, d] = weekStart.split('-').map(Number);
     const from = new Date(y, m - 1, d), to = new Date(y, m - 1, d + 7);
-    apiFetch<{ reminders: Reminder[]; lastSyncedAt: string | null }>(`/api/reminders?from=${from.toISOString()}&to=${to.toISOString()}`).then(res => {
+    apiFetch<{ reminders: Reminder[]; undated: Reminder[]; lastSyncedAt: string | null }>(`/api/reminders?from=${from.toISOString()}&to=${to.toISOString()}`).then(res => {
       if (!active || !res.ok || !res.data) return;
-      setReminders(res.data.reminders); setLastSyncedAt(res.data.lastSyncedAt);
+      setReminders(res.data.reminders); setUndated(res.data.undated || []); setLastSyncedAt(res.data.lastSyncedAt);
     });
     return () => { active = false; };
   }, [apiFetch, weekStart, version]);
@@ -43,13 +44,17 @@ export function useWeekReminders(weekStart: string) {
   const byDay = useMemo(() => {
     const map: Record<string, DayReminder[]> = {};
     for (const r of reminders) {
+      if (!r.dueAt) continue;
       const due = new Date(r.dueAt);
-      const day = reminderDay(r);
+      const day = reminderDay(r as Reminder & { dueAt: string });
       (map[day] ||= []).push({ ...r, day, minute: r.allDay ? null : due.getHours() * 60 + due.getMinutes() });
     }
     for (const list of Object.values(map)) list.sort((a, b) => (a.minute ?? -1) - (b.minute ?? -1) || a.title.localeCompare(b.title));
     return map;
   }, [reminders]);
 
-  return { byDay, lastSyncedAt, hasAny: reminders.length > 0, reload };
+  /** Reminders without a due date: they have no place in the calendar, so they are listed apart. */
+  const noDate = useMemo<DayReminder[]>(() => undated.map(r => ({ ...r, day: '', minute: null })), [undated]);
+
+  return { byDay, noDate, lastSyncedAt, hasAny: reminders.length > 0, reload };
 }

@@ -80,31 +80,23 @@ export default function ShortcutGuide() {
       <p>Open the Shortcuts app, tap <strong>+</strong> and name it <CopyChip value={SHORTCUT_NAME} />.</p>
       <a href="shortcuts://" className="mt-2 inline-flex min-h-10 items-center rounded-xl bg-[var(--surface-2)] px-3 text-sm font-semibold text-indigo-600 dark:text-indigo-300">Open Shortcuts ↗</a>
     </> },
-    { id:'range', title:'Set the date range', body: <ol className="list-decimal space-y-1.5 pl-5">
-      <li>Add <Action en="Date" es="Fecha" /> → <em>Current Date</em>.</li>
-      <li>Add <Action en="Adjust Date" es="Ajustar fecha" /> → <strong>Subtract 7 days</strong>. Long-press the result → Rename → <CopyChip value="From" />.</li>
-      <li>Add another <Action en="Adjust Date" es="Ajustar fecha" /> → <strong>Add 35 days</strong> to <em>Date</em>. Rename → <CopyChip value="To" />.</li>
-    </ol> },
-    { id:'find', title:'Find the reminders', body: <>
-      <p>Add <Action en="Find Reminders" es="Buscar recordatorios" />, choose <strong>All</strong> criteria and add two filters:</p>
-      <ul className="mt-1.5 list-disc space-y-1 pl-5">
-        <li><em>Due Date</em> · <strong>is after</strong> · From</li>
-        <li><em>Due Date</em> · <strong>is before</strong> · To</li>
-      </ul>
-      <p className="mt-1.5">Sort by Due Date and turn <strong>Limit</strong> off. Don’t filter out completed ones; they show crossed out.</p>
+    { id:'find', title:'Find your pending reminders', body: <>
+      <p>Add <Action en="Find Reminders" es="Buscar recordatorios" />. Tap <strong>Add Filter</strong> and set it to <strong>Is Not Completed</strong> <span className="tt-text-muted">(No está completado)</span>.</p>
+      <p className="mt-1.5">No date filters and <strong>Limit</strong> off: TaskTimmer receives every pending reminder and skips the ones it already has.</p>
     </> },
     { id:'repeat', title:'Loop over each reminder', body: <>
       <p>Add <Action en="Repeat with Each" es="Repetir con cada" /> on <em>Reminders</em>. Put the next two actions <strong>inside</strong> the loop.</p>
     </> },
     { id:'format', title:'Format the due date', body: <p>
-      Add <Action en="Format Date" es="Formatear fecha" /> with <em>Repeat Item › Due Date</em>. Set <strong>Date Format: ISO 8601</strong> and turn on <strong>Include ISO 8601 Time</strong>.
+      Add <Action en="Format Date" es="Formatear fecha" /> with <em>Repeat Item › Due Date</em>. Set <strong>Date Format: ISO 8601</strong> and turn on <strong>Include ISO 8601 Time</strong>. Reminders without a due date simply send an empty date.
     </p> },
     { id:'dict', title:'Build a dictionary', body: <>
       <p>Add <Action en="Dictionary" es="Diccionario" /> with these <strong>Text</strong> keys (tap to copy):</p>
       <dl className="mt-2 divide-y divide-[var(--line)] rounded-xl border border-[var(--line)]">
-        {[['title', 'Repeat Item › Title'], ['due', 'Formatted Date'], ['list', 'Repeat Item › List'], ['completed', 'Repeat Item › Is Completed'], ['notes', 'Repeat Item › Notes (optional)'], ['priority', 'Repeat Item › Priority (optional)']].map(([key, value]) =>
+        {[['title', 'Repeat Item › Title'], ['due', 'Formatted Date'], ['list', 'Repeat Item › List'], ['created', 'Repeat Item › Creation Date (recommended)'], ['notes', 'Repeat Item › Notes (optional)'], ['priority', 'Repeat Item › Priority (optional)']].map(([key, value]) =>
           <div key={key} className="flex items-center gap-3 px-3 py-2"><dt className="w-24 shrink-0"><CopyChip value={key} /></dt><dd className="tt-text-muted min-w-0 text-[13px]">{value}</dd></div>)}
       </dl>
+      <p className="mt-2 text-[13px]"><em>created</em> tells apart reminders with the same name, so none is registered twice.</p>
     </> },
     { id:'combine', title:'Join the results', body: <p>
       After <em>End Repeat</em>, add <Action en="Combine Text" es="Combinar texto" /> with <em>Repeat Results</em> and <strong>New Lines</strong>.
@@ -124,7 +116,7 @@ export default function ShortcutGuide() {
       <p>Tap ▶︎. Allow access to <strong>Reminders</strong>, and when asked about sending data to this site choose <strong>Always Allow</strong>, or the daily automation will stop to ask.</p>
       <div className={'mt-3 flex items-center gap-3 rounded-xl p-3 text-sm ' + (synced ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200' : 'bg-[var(--surface-2)]')}>
         {synced ? <IconCheck size={18} /> : <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />}
-        <span className="min-w-0 flex-1">{synced ? `Received ${status!.stored} reminders · ${new Date(status!.lastSyncedAt!).toLocaleString(undefined, { dateStyle:'medium', timeStyle:'short' })}` : 'Waiting for the first sync…'}</span>
+        <span className="min-w-0 flex-1">{synced ? `${status!.stored} pending reminders · synced ${new Date(status!.lastSyncedAt!).toLocaleString(undefined, { dateStyle:'medium', timeStyle:'short' })}` : 'Waiting for the first sync…'}</span>
         <Button variant="ghost" className="!min-h-8 !px-2 text-xs" onClick={load}>Refresh</Button>
       </div>
     </> }
@@ -151,7 +143,7 @@ export default function ShortcutGuide() {
     <PageHeader title="Apple Reminders setup" />
     <div className="tt-panel flex items-center gap-3 p-3 pl-4 text-sm">
       <span className="tt-empty-icon !mb-0 !h-9 !w-9 shrink-0"><IconBell size={18} /></span>
-      <p className="min-w-0 flex-1">A daily iPhone Shortcut sends your reminders here. They are <strong>read only</strong> in TaskTimmer.</p>
+      <p className="min-w-0 flex-1">A daily iPhone Shortcut sends your <strong>pending</strong> reminders. New ones are added once, completed ones disappear. <strong>Read only</strong> here.</p>
     </div>
     <div className="tt-segmented flex w-full" role="tablist" aria-label="Setup part">
       {([['shortcut', '1 · Shortcut', shortcutSteps], ['automation', '2 · Automation', automationSteps]] as const).map(([id, label, list]) =>

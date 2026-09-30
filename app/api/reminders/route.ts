@@ -6,8 +6,8 @@ import { prisma } from '../../../lib/prisma';
 export const dynamic = 'force-dynamic';
 
 /**
- * Read-only reminders due in [from, to). The client sends the instants for its local week
- * so the server never has to guess the user's time zone.
+ * Read-only pending reminders due in [from, to), plus the ones without a due date. The client
+ * sends the instants for its local week so the server never has to guess the user's time zone.
  */
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions as any);
@@ -21,13 +21,14 @@ export async function GET(req: Request) {
   }
   // Date-only reminders are stored at 12:00 UTC; widen by 14h so they are not lost at the edges.
   const pad = 14 * 3600000;
-  const [reminders, last] = await Promise.all([
+  const select = { id: true, title: true, notes: true, list: true, dueAt: true, allDay: true, completed: true, flagged: true, priority: true };
+  const [reminders, undated, token] = await Promise.all([
     prisma.externalReminder.findMany({
       where: { userId, dueAt: { gte: new Date(from.getTime() - pad), lt: new Date(to.getTime() + pad) } },
-      orderBy: [{ dueAt: 'asc' }, { title: 'asc' }],
-      select: { id: true, title: true, notes: true, list: true, dueAt: true, allDay: true, completed: true, flagged: true, priority: true }
+      orderBy: [{ dueAt: 'asc' }, { title: 'asc' }], select
     }),
-    prisma.externalReminder.findFirst({ where: { userId }, orderBy: { syncedAt: 'desc' }, select: { syncedAt: true } })
+    prisma.externalReminder.findMany({ where: { userId, dueAt: null }, orderBy: [{ priority: 'desc' }, { title: 'asc' }], take: 200, select }),
+    prisma.integrationToken.findFirst({ where: { userId }, select: { lastSyncAt: true } })
   ]);
-  return NextResponse.json({ reminders, lastSyncedAt: last?.syncedAt ?? null });
+  return NextResponse.json({ reminders, undated, lastSyncedAt: token?.lastSyncAt ?? null });
 }

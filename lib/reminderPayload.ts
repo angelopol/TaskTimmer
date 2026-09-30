@@ -5,9 +5,19 @@
 //   [ {...}, ... ]                       bare array
 //   "<text>"                             text/plain body in any of the text forms above
 
+import { createHash } from 'crypto';
+
 export interface ParsedReminder {
-  title: string; notes: string | null; list: string | null;
-  dueAt: Date | null; allDay: boolean; completed: boolean; flagged: boolean; priority: number;
+  externalKey: string; title: string; notes: string | null; list: string | null;
+  dueAt: Date | null; allDay: boolean; flagged: boolean; priority: number;
+}
+
+/**
+ * Shortcuts exposes no reminder id, so identity is title + list + creation date (when sent).
+ * Due date and notes are left out on purpose: editing them updates the stored reminder instead of duplicating it.
+ */
+function reminderKey(title: string, list: string | null, created: string | null) {
+  return createHash('sha256').update([title.toLowerCase(), (list || '').toLowerCase(), created || ''].join(String.fromCharCode(31))).digest('hex').slice(0, 32);
 }
 
 const MAX_ITEMS = 1000;
@@ -90,24 +100,30 @@ function toDue(value: unknown, explicitAllDay: unknown): { dueAt: Date | null; a
   return { dueAt, allDay: explicitAllDay === undefined ? midnight : toBool(explicitAllDay) };
 }
 
-export function parseReminders(body: unknown): { reminders: ParsedReminder[]; received: number; skipped: number } {
+/**
+ * Only pending reminders are kept: completed items are ignored, and repeated reminders in the
+ * same upload (same key) collapse into one.
+ */
+export function parseReminders(body: unknown): { reminders: ParsedReminder[]; received: number; unreadable: number; completed: number; duplicates: number } {
   const items = toItems(body);
-  const reminders: ParsedReminder[] = [];
+  const byKey = new Map<string, ParsedReminder>();
+  let unreadable = Math.max(0, items.length - MAX_ITEMS), completed = 0, duplicates = 0;
   for (const raw of items.slice(0, MAX_ITEMS)) {
-    if (!raw || typeof raw !== 'object') continue;
+    if (!raw || typeof raw !== 'object') { unreadable++; continue; }
     const item = raw as Record<string, unknown>;
     const title = toText(pick(item, 'title', 'titulo', 'título', 'name'), 300);
-    if (!title) continue;
-    const due = toDue(pick(item, 'due', 'duedate', 'dueat', 'fecha'), pick(item, 'allday', 'todoeldia'));
-    reminders.push({
-      title,
+    if (!title) { unreadable++; continue; }
+    if (toBool(pick(item, 'completed', 'iscompleted', 'done', 'completado'))) { completed++; continue; }
+    const list = toText(pick(item, 'list', 'lista'), 100);
+    const externalKey = reminderKey(title, list, toText(pick(item, 'created', 'creationdate', 'creado', 'fechadecreacion'), 64));
+    if (byKey.has(externalKey)) { duplicates++; continue; }
+    byKey.set(externalKey, {
+      externalKey, title, list,
       notes: toText(pick(item, 'notes', 'notas'), 1000),
-      list: toText(pick(item, 'list', 'lista'), 100),
-      completed: toBool(pick(item, 'completed', 'iscompleted', 'done', 'completado')),
       flagged: toBool(pick(item, 'flagged', 'isflagged', 'marcado')),
       priority: toPriority(pick(item, 'priority', 'prioridad')),
-      ...due
+      ...toDue(pick(item, 'due', 'duedate', 'dueat', 'fecha'), pick(item, 'allday', 'todoeldia'))
     });
   }
-  return { reminders, received: items.length, skipped: items.length - reminders.length };
+  return { reminders: Array.from(byKey.values()), received: items.length, unreadable, completed, duplicates };
 }

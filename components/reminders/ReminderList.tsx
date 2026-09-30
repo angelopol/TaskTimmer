@@ -4,7 +4,7 @@ import { minutesToHHMM } from '../../lib/time';
 import { IconBell, IconCheck } from '../ui/icons';
 import type { DayReminder } from './useWeekReminders';
 
-/** Read-only list of Apple Reminders (they can only be changed in the Reminders app). */
+/** Read-only list of pending Apple Reminders (they can only be changed in the Reminders app). */
 export function ReminderList({ reminders, className = '' }: { reminders:DayReminder[]; className?:string }) {
   if (!reminders.length) return null;
   return <ul className={'tt-list ' + className} aria-label="Apple Reminders">
@@ -17,7 +17,7 @@ export function ReminderList({ reminders, className = '' }: { reminders:DayRemin
           {r.priority > 0 && !r.completed && <span className="mr-1 font-bold text-amber-600 dark:text-amber-400" aria-label={'Priority ' + r.priority}>{'!'.repeat(r.priority)}</span>}
           {r.title}
         </span>
-        <span className="tt-text-muted block truncate text-xs tabular-nums">{r.minute === null ? 'All day' : minutesToHHMM(r.minute)}{r.list ? ' · ' + r.list : ''}{r.completed ? ' · Done' : ''}</span>
+        <span className="tt-text-muted block truncate text-xs tabular-nums">{!r.day ? 'No date' : r.minute === null ? 'All day' : minutesToHHMM(r.minute)}{r.list ? ' · ' + r.list : ''}{r.completed ? ' · Done' : ''}</span>
       </span>
     </li>)}
   </ul>;

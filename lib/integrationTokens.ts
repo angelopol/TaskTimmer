@@ -27,7 +27,7 @@ export function hashToken(raw: string) {
 /** Creates (or replaces) the user's token for `kind`. Any previous token stops working immediately. */
 export async function issueToken(userId: string, kind = REMINDERS_KIND) {
   const token = generateToken();
-  const data = { tokenHash: hashToken(token), prefix: token.slice(0, 4), createdAt: new Date(), lastUsedAt: null };
+  const data = { tokenHash: hashToken(token), prefix: token.slice(0, 4), createdAt: new Date(), lastUsedAt: null, lastSyncAt: null };
   await prisma.integrationToken.upsert({
     where: { userId_kind: { userId, kind } },
     create: { userId, kind, ...data },

@@ -15,17 +15,16 @@ async function sessionUser() {
 export async function GET() {
   const userId = await sessionUser();
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const [token, count, last] = await Promise.all([
+  const [token, count] = await Promise.all([
     prisma.integrationToken.findUnique({ where: { userId_kind: { userId, kind: REMINDERS_KIND } } }),
-    prisma.externalReminder.count({ where: { userId } }),
-    prisma.externalReminder.findFirst({ where: { userId }, orderBy: { syncedAt: 'desc' }, select: { syncedAt: true } })
+    prisma.externalReminder.count({ where: { userId } })
   ]);
   return NextResponse.json({
     connected: !!token,
     prefix: token?.prefix ?? null,
     createdAt: token?.createdAt ?? null,
     lastUsedAt: token?.lastUsedAt ?? null,
-    lastSyncedAt: last?.syncedAt ?? null,
+    lastSyncedAt: token?.lastSyncAt ?? null,
     stored: count
   });
 }

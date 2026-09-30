@@ -94,16 +94,19 @@ model IntegrationToken {
   tokenHash  String    @unique
   prefix     String    // first characters, shown in the UI to identify the token
   lastUsedAt DateTime?
+  lastSyncAt DateTime? // last successful reminders upload (even when it had 0 pending)
   createdAt  DateTime  @default(now())
   @@unique([userId, kind])
 }
 
-// Read-only snapshot of Apple Reminders. Each sync replaces the user's whole set.
+// Read-only copy of the user's pending Apple Reminders. Syncs are deduplicated by `externalKey`:
+// new reminders are created, known ones updated, and ones no longer sent (completed/deleted) removed.
 model ExternalReminder {
   id        String    @id @default(cuid())
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String
   source    String    @default("apple")
+  externalKey String  // sha256 of title + list + creation date: stable identity across syncs
   title     String
   notes     String?
   list      String?
@@ -113,5 +116,6 @@ model ExternalReminder {
   flagged   Boolean   @default(false)
   priority  Int       @default(0)
   syncedAt  DateTime  @default(now())
+  @@unique([userId, externalKey])
   @@index([userId, dueAt])
 }

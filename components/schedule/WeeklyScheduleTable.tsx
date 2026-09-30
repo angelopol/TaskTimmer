@@ -940,6 +940,14 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
       {loading && <LoadingState label="Loading your schedule…" />}
       {error && <ErrorState message={error} onRetry={() => setRetry(v=>v+1)} />}
       {!loading && !error && !segments.length && <EmptyState title="No routine yet" icon={<IconCalendar size={24} />}><Button leftIcon={<IconAdd size={18} />} onClick={onManage}>Plan a block</Button></EmptyState>}
+      {!loading && reminders.noDate.length > 0 && <details className="group tt-panel">
+        <summary className="flex min-h-11 list-none items-center gap-2 px-4 text-sm font-semibold [&::-webkit-details-marker]:hidden">
+          <IconBell size={16} className="text-amber-600 dark:text-amber-400" />
+          {reminders.noDate.length} reminder{reminders.noDate.length === 1 ? '' : 's'} without a date
+          <span className="tt-text-muted ml-auto text-xs font-normal group-open:hidden">Show</span><span className="tt-text-muted ml-auto hidden text-xs font-normal group-open:inline">Hide</span>
+        </summary>
+        <div className="px-3 pb-3"><ReminderList reminders={reminders.noDate} /></div>
+      </details>}
       {!loading && !error && view === 'agenda' && <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {WEEKDAY_NAMES_LONG.map((day, index) => {
           const blocks = [...byDay[index+1]].sort((a,b)=>a.startMinute-b.startMinute);
