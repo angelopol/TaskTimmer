@@ -118,10 +118,10 @@ export default function ShortcutGuide() {
         <li><Action en="Get Dictionary Value" es="Obtener valor del diccionario" />: key <CopyChip value="complete" /> from <em>Contents of URL</em>.</li>
         <li><Action en="Repeat with Each" es="Repetir con cada" /> on that list. Inside it:
           <ul className="mt-1 list-disc space-y-1 pl-5">
-            <li><Action en="Get Dictionary Value" es="Obtener valor del diccionario" />: key <CopyChip value="title" /> from <em>Repeat Item</em>. Rename it <CopyChip value="Title" />.</li>
-            <li>The same with key <CopyChip value="list" />. Rename it <CopyChip value="List" />.</li>
+            <li><Action en="Get Dictionary Value" es="Obtener valor del diccionario" />: key <CopyChip value="title" /> from <em>Repeat Item</em>, then <Action en="Set Variable" es="Establecer variable" /> named <CopyChip value="Title" />.</li>
+            <li>The same with key <CopyChip value="list" />, saved as a variable named <CopyChip value="List" />. (Both values are otherwise called “Dictionary Value”, which makes them hard to tell apart.)</li>
             <li><Action en="Find Reminders" es="Buscar recordatorios" /> where <em>Title is</em> Title, <em>List is</em> List and <em>Is Not Completed</em>. Set <strong>Limit</strong> to 1.</li>
-            <li><Action en="Edit Reminders" es="Editar recordatorios" />: set <em>Is Completed</em> to <strong>Yes</strong>. If you cannot find this action, search “complete” in the action list.</li>
+            <li><Action en="Set Is Completed" es="Configurar Está completo" /> of <em>Reminders</em> to <strong>Yes</strong>. Tap the faded “Reminder” and pick <em>Reminders</em>, the result of Find Reminders (it fills itself in when Find Reminders sits right above).</li>
           </ul>
         </li>
       </ol>

@@ -87,10 +87,10 @@ hecho en la app y que sigue pendiente en el iPhone). Añade esto **después** de
 
 8. **Obtener valor del diccionario** *(Get Dictionary Value)*: clave `complete` del *Contenido de la URL*.
 9. **Repetir con cada** *(Repeat with Each)* sobre esa lista. Dentro del bloque:
-   - **Obtener valor del diccionario**: clave `title` del *Elemento de repetición* → renómbralo `Title`.
-   - **Obtener valor del diccionario**: clave `list` → renómbralo `List`.
+   - **Obtener valor del diccionario**: clave `title` del *Elemento de repetición* → **Establecer variable** llamada `Title`.
+   - **Obtener valor del diccionario**: clave `list` → **Establecer variable** llamada `List`.
    - **Buscar recordatorios** *(Find Reminders)*: **Título es** `Title`, **Lista es** `List`, **No está completado**; **Límite**: 1.
-   - **Editar recordatorios** *(Edit Reminders)*: **Está completado** = **Sí**. Si no encuentras la acción, busca “complete” o “completar” en la lista de acciones.
+   - **Configurar Está completo** *(Set Is Completed)* de **Recordatorios** como **Sí**: toca el “Recordatorio” gris y elige *Recordatorios* (el resultado de Buscar recordatorios; se rellena solo si esa acción queda justo encima).
 
 Si el atajo falla en este paso, el recordatorio vuelve a venir en `complete` en cada envío hasta que desaparece
 de tu lista pendiente, así que se reintenta solo. Si hay dos recordatorios con el mismo título en la misma lista,
