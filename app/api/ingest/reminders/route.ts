@@ -6,6 +6,7 @@ import { parseReminders } from '../../../../lib/reminderPayload';
 
 // Public endpoint for the iOS Shortcut (exempted from the session middleware).
 // Auth: `Authorization: Bearer XXXX-XXXX-XXXX-XXXX`. Each POST carries all pending reminders; see POST for the dedupe rules.
+// The response's `complete` list is how reminders completed in TaskTimmer reach the iPhone.
 export const dynamic = 'force-dynamic';
 const MAX_BODY = 1_000_000;
 const WINDOW = 10 * 60 * 1000;
@@ -61,17 +62,24 @@ export async function POST(req: Request) {
       || old.flagged !== r.flagged || old.priority !== r.priority || old.dueAt?.getTime() !== r.dueAt?.getTime());
   });
   const toRemove = existing.filter(r => !incoming.has(r.externalKey)).map(r => r.id);
+  // Completed in TaskTimmer but still pending on the iPhone: ask the Shortcut to complete them.
+  // They are offered again on every sync until they disappear from the upload, so a failed run retries itself.
+  const toComplete = existing.filter(r => r.completionRequestedAt && incoming.has(r.externalKey));
   await prisma.$transaction([
     prisma.externalReminder.deleteMany({ where: { id: { in: toRemove } } }),
     prisma.externalReminder.createMany({ data: toCreate.map(r => ({ ...r, userId, source: 'apple', syncedAt })), skipDuplicates: true }),
     ...toUpdate.map(r => prisma.externalReminder.update({ where: { userId_externalKey: { userId, externalKey: r.externalKey } }, data: { ...r, syncedAt } })),
     prisma.externalReminder.updateMany({ where: { userId, source: 'apple' }, data: { syncedAt } }),
+    prisma.externalReminder.updateMany({ where: { id: { in: toComplete.map(r => r.id) } }, data: { completionSentAt: syncedAt } }),
     prisma.integrationToken.updateMany({ where: { userId, kind: REMINDERS_KIND }, data: { lastSyncAt: syncedAt } })
   ]);
   const unchanged = reminders.length - toCreate.length - toUpdate.length;
   return NextResponse.json({
     ok: true,
-    message: `Synced ${reminders.length} pending: ${toCreate.length} new, ${toUpdate.length} updated, ${toRemove.length} removed.`,
+    message: `Synced ${reminders.length} pending: ${toCreate.length} new, ${toUpdate.length} updated, ${toRemove.length} removed` +
+      (toComplete.length ? `, ${toComplete.length} to complete on this iPhone.` : '.'),
+    // For the Shortcut's second loop: find each one by title + list and mark it completed.
+    complete: toComplete.map(r => ({ title: r.title, list: r.list ?? '' })),
     pending: reminders.length, created: toCreate.length, updated: toUpdate.length, unchanged, removed: toRemove.length,
     duplicates, ignoredCompleted: completed, unreadable, syncedAt: syncedAt.toISOString()
   });

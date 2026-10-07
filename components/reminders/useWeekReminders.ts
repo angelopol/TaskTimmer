@@ -5,6 +5,8 @@ import { useApiClient } from '../useApiClient';
 export interface Reminder {
   id: string; title: string; notes: string | null; list: string | null;
   dueAt: string | null; allDay: boolean; completed: boolean; flagged: boolean; priority: number;
+  /** Set once a sync response has asked the iPhone to complete it; until then it can still be undone. */
+  completionSentAt: string | null;
 }
 export interface DayReminder extends Reminder { day: string; minute: number | null }
 
@@ -18,7 +20,10 @@ export function reminderDay(r: Reminder & { dueAt: string }) {
   return localISO(due);
 }
 
-/** Read-only Apple Reminders for the week starting at `weekStart` (local Monday, YYYY-MM-DD), keyed by local day. */
+/**
+ * Apple Reminders for the week starting at `weekStart` (local Monday, YYYY-MM-DD), keyed by local day.
+ * They are a copy: only completing one is possible here, and it reaches the iPhone on the Shortcut's next sync.
+ */
 export function useWeekReminders(weekStart: string) {
   const { apiFetch } = useApiClient();
   const [reminders, setReminders] = useState<Reminder[]>([]);
@@ -36,6 +41,20 @@ export function useWeekReminders(weekStart: string) {
     });
     return () => { active = false; };
   }, [apiFetch, weekStart, version]);
+  const patch = useCallback((id: string, change: Partial<Reminder>) => {
+    const apply = (list: Reminder[]) => list.map(r => r.id === id ? { ...r, ...change } : r);
+    setReminders(apply); setUndated(apply);
+  }, []);
+  /** Optimistic complete / reopen. Rolls back and returns the error message if the server refuses. */
+  const setCompleted = useCallback(async (reminder: Reminder, completed: boolean) => {
+    const previous = { completed: reminder.completed, completionSentAt: reminder.completionSentAt };
+    patch(reminder.id, { completed, completionSentAt: null });
+    const res = await apiFetch<{ reminder: Reminder }>(`/api/reminders/${reminder.id}`, { method: 'PATCH', json: { completed } });
+    if (res.ok && res.data) { patch(reminder.id, res.data.reminder); return null; }
+    patch(reminder.id, previous);
+    if (res.status === 404 || res.status === 409) reload();
+    return res.error || 'Could not update the reminder.';
+  }, [apiFetch, patch, reload]);
   useEffect(() => {
     window.addEventListener('focus', reload); window.addEventListener('reminders:changed', reload);
     return () => { window.removeEventListener('focus', reload); window.removeEventListener('reminders:changed', reload); };
@@ -56,5 +75,5 @@ export function useWeekReminders(weekStart: string) {
   /** Reminders without a due date: they have no place in the calendar, so they are listed apart. */
   const noDate = useMemo<DayReminder[]>(() => undated.map(r => ({ ...r, day: '', minute: null })), [undated]);
 
-  return { byDay, noDate, lastSyncedAt, hasAny: reminders.length > 0, reload };
+  return { byDay, noDate, lastSyncedAt, hasAny: reminders.length > 0, setCompleted, reload };
 }

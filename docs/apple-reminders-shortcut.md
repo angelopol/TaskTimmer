@@ -1,12 +1,14 @@
 # Recordatorios de Apple → TaskTimmer (Atajo diario)
 
-TaskTimmer muestra tus Recordatorios **pendientes** de iPhone en el calendario semanal (**solo lectura**).
+TaskTimmer muestra tus Recordatorios **pendientes** de iPhone en el calendario semanal. Solo puedes **completarlos**
+desde TaskTimmer; lo demás se edita en la app Recordatorios.
 Un Atajo de iOS envía una vez al día **todos** los recordatorios no completados, sin filtros de fecha.
 TaskTimmer compara la lista con lo que ya tiene:
 
 - **Nuevo** → se registra una sola vez (nunca se duplica, aunque el atajo corra varias veces).
 - **Ya registrado** → se actualiza si cambió su fecha, notas o prioridad.
 - **Ya no viene en la lista** (lo completaste o borraste) → desaparece de TaskTimmer.
+- **Completado en TaskTimmer** → el atajo lo completa en tu iPhone en su siguiente ejecución (ver 2.4).
 
 - No hace falta cuenta de desarrollador ni instalar nada extra: solo la app **Atajos**.
 - iOS / iPadOS 16 o superior (para que la automatización se ejecute sin preguntar).
@@ -79,7 +81,22 @@ en orden (entre paréntesis, el nombre en inglés):
 7. *(Opcional, útil para probar)* **Obtener valor del diccionario** → clave `message` del *Contenido de la URL* →
     **Mostrar notificación** con ese valor.
 
-### 2.4 Primera ejecución (obligatoria)
+### 2.4 Completar en el iPhone lo que terminaste en TaskTimmer
+TaskTimmer responde al envío con la lista `complete` (título y lista de cada recordatorio que marcaste como
+hecho en la app y que sigue pendiente en el iPhone). Añade esto **después** de *Obtener contenido de URL*:
+
+8. **Obtener valor del diccionario** *(Get Dictionary Value)*: clave `complete` del *Contenido de la URL*.
+9. **Repetir con cada** *(Repeat with Each)* sobre esa lista. Dentro del bloque:
+   - **Obtener valor del diccionario**: clave `title` del *Elemento de repetición* → renómbralo `Title`.
+   - **Obtener valor del diccionario**: clave `list` → renómbralo `List`.
+   - **Buscar recordatorios** *(Find Reminders)*: **Título es** `Title`, **Lista es** `List`, **No está completado**; **Límite**: 1.
+   - **Editar recordatorios** *(Edit Reminders)*: **Está completado** = **Sí**. Si no encuentras la acción, busca “complete” o “completar” en la lista de acciones.
+
+Si el atajo falla en este paso, el recordatorio vuelve a venir en `complete` en cada envío hasta que desaparece
+de tu lista pendiente, así que se reintenta solo. Si hay dos recordatorios con el mismo título en la misma lista,
+se completa uno (límite 1); el otro queda pendiente.
+
+### 2.5 Primera ejecución (obligatoria)
 Toca ▶︎ para ejecutarlo a mano **una vez**:
 - iOS pedirá acceso a **Recordatorios** → **Permitir**.
 - iOS preguntará si el atajo puede enviar datos a tu dominio → **Permitir siempre**.
@@ -112,8 +129,14 @@ No hace falta automatizarlo en más de un dispositivo.
 - Al tocar un bloque, la hoja muestra sus recordatorios en la sección **Reminders · read only**.
 - **Sin fecha**: arriba del calendario, un apartado plegable “N reminders without a date”.
 
-Todo es de **solo lectura**: para editar o completar un recordatorio usa la app Recordatorios.
-Al completarlo, deja de enviarse y desaparece de TaskTimmer en la siguiente sincronización.
+Todo es de **solo lectura**, salvo **completar**: toca el círculo de un recordatorio (o **Mark as done** en su
+hoja de detalle). Queda tachado con “Sends to iPhone on next sync” y llega a la app Recordatorios cuando el atajo se
+ejecuta de nuevo. Hasta ese momento puedes **deshacerlo**; después ya solo se reabre en el iPhone.
+Cualquier otro cambio (título, fecha, notas…) se hace en la app Recordatorios y llega en el siguiente envío.
+Al completarse en el iPhone, deja de enviarse y desaparece de TaskTimmer.
+
+**Frecuencia:** TaskTimmer no puede empujar nada al iPhone, solo responder cuando el atajo le escribe. Si quieres que lo
+que completas aquí llegue antes, añade más automatizaciones (por ejemplo cada pocas horas).
 
 ### Cómo se evita registrar dos veces el mismo recordatorio
 Atajos no expone un identificador del recordatorio, así que TaskTimmer usa
@@ -180,8 +203,13 @@ Respuesta:
 ```json
 { "ok": true, "message": "Synced 12 pending: 2 new, 1 updated, 3 removed.",
   "pending": 12, "created": 2, "updated": 1, "unchanged": 9, "removed": 3,
+  "complete": [ { "title": "Pagar renta", "list": "Casa" } ],
   "duplicates": 0, "ignoredCompleted": 0, "unreadable": 0, "syncedAt": "…" }
 ```
+
+`complete` lista los recordatorios marcados como hechos en TaskTimmer que siguen pendientes en el iPhone (`list` va
+vacío si no tienen lista). El atajo debe buscar cada uno por título y lista y completarlo. Mientras sigan llegando como
+pendientes, vuelven a aparecer en `complete` en cada envío.
 
 `GET /api/ingest/reminders` con el mismo encabezado comprueba el token sin modificar nada.
 

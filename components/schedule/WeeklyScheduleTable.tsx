@@ -894,7 +894,7 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
           const inBlock = remindersIn(selectedSegment.weekday, selectedSegment.startMinute, selectedSegment.endMinute);
           return inBlock.length > 0 && <section aria-label="Apple Reminders" className="space-y-2">
             <h3 className="flex items-center gap-1.5 text-sm font-semibold"><IconBell size={15} />Reminders <span className="tt-text-muted text-xs font-normal">· read only</span></h3>
-            <ReminderList reminders={inBlock} />
+            <ReminderList reminders={inBlock} onComplete={reminders.setCompleted} />
           </section>;
         })()}
         <section aria-label="Logged time" className="space-y-2">
@@ -1009,7 +1009,7 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
           {reminders.noDate.length} reminder{reminders.noDate.length === 1 ? '' : 's'} without a date
           <span className="tt-text-muted ml-auto text-xs font-normal group-open:hidden">Show</span><span className="tt-text-muted ml-auto hidden text-xs font-normal group-open:inline">Hide</span>
         </summary>
-        <div className="px-3 pb-3"><ReminderList reminders={reminders.noDate} /></div>
+        <div className="px-3 pb-3"><ReminderList reminders={reminders.noDate} onComplete={reminders.setCompleted} /></div>
       </details>}
       {!loading && ideamap.error && <p role="status" className="tt-badge !whitespace-normal !rounded-xl" data-variant="amber">IdeaMap: {ideamap.error}</p>}
       {!loading && ideamap.unscheduled.length > 0 && <details className="group tt-panel">
@@ -1048,7 +1048,7 @@ export default function WeeklyScheduleTable({ onManage }: { onManage:()=>void })
               })}
               {!blocks.length && <li className="tt-text-muted px-4 py-3 text-sm">No blocks planned.</li>}
             </ul>
-            <ReminderList reminders={reminders.byDay[weekDates[index]] || []} />
+            <ReminderList reminders={reminders.byDay[weekDates[index]] || []} onComplete={reminders.setCompleted} />
             <IdeaMapTaskList tasks={ideamap.byDay[weekDates[index]] || []} setStatus={ideamap.setStatus} />
           </section>;
         })}

@@ -117,6 +117,8 @@ model ExternalReminder {
   flagged   Boolean   @default(false)
   priority  Int       @default(0)
   syncedAt  DateTime  @default(now())
+  completionRequestedAt DateTime? // marked done in TaskTimmer; the iPhone Shortcut completes it on its next sync
+  completionSentAt      DateTime? // a sync response already asked the Shortcut to complete it
   @@unique([userId, externalKey])
   @@index([userId, dueAt])
 }

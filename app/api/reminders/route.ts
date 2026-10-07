@@ -21,7 +21,7 @@ export async function GET(req: Request) {
   }
   // Date-only reminders are stored at 12:00 UTC; widen by 14h so they are not lost at the edges.
   const pad = 14 * 3600000;
-  const select = { id: true, title: true, notes: true, list: true, dueAt: true, allDay: true, completed: true, flagged: true, priority: true };
+  const select = { id: true, title: true, notes: true, list: true, dueAt: true, allDay: true, completed: true, flagged: true, priority: true, completionSentAt: true };
   const [reminders, undated, token] = await Promise.all([
     prisma.externalReminder.findMany({
       where: { userId, dueAt: { gte: new Date(from.getTime() - pad), lt: new Date(to.getTime() + pad) } },

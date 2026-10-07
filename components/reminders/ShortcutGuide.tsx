@@ -112,6 +112,21 @@ export default function ShortcutGuide() {
       </ul>
       {!token && <p className="tt-badge mt-2 !whitespace-normal !rounded-xl" data-variant="amber">Replace YOUR-TOKEN with the token from step 1.</p>}
     </> },
+    { id:'apply', title:'Complete on your iPhone what you finished here', body: <>
+      <p>TaskTimmer answers the send step with the reminders you marked done in the app. Add this <strong>after</strong> <Action en="Get Contents of URL" es="Obtener contenido de URL" />:</p>
+      <ol className="mt-1.5 list-decimal space-y-1.5 pl-5">
+        <li><Action en="Get Dictionary Value" es="Obtener valor del diccionario" />: key <CopyChip value="complete" /> from <em>Contents of URL</em>.</li>
+        <li><Action en="Repeat with Each" es="Repetir con cada" /> on that list. Inside it:
+          <ul className="mt-1 list-disc space-y-1 pl-5">
+            <li><Action en="Get Dictionary Value" es="Obtener valor del diccionario" />: key <CopyChip value="title" /> from <em>Repeat Item</em>. Rename it <CopyChip value="Title" />.</li>
+            <li>The same with key <CopyChip value="list" />. Rename it <CopyChip value="List" />.</li>
+            <li><Action en="Find Reminders" es="Buscar recordatorios" /> where <em>Title is</em> Title, <em>List is</em> List and <em>Is Not Completed</em>. Set <strong>Limit</strong> to 1.</li>
+            <li><Action en="Edit Reminders" es="Editar recordatorios" />: set <em>Is Completed</em> to <strong>Yes</strong>. If you cannot find this action, search “complete” in the action list.</li>
+          </ul>
+        </li>
+      </ol>
+      <p className="mt-2">A reminder you complete in TaskTimmer shows “Sends to iPhone on next sync” and reaches the Reminders app the next time this Shortcut runs. Until then you can undo it. Add a second automation at another hour if you want it faster.</p>
+    </> },
     { id:'run', title:'Run it once', body: <>
       <p>Tap ▶︎. Allow access to <strong>Reminders</strong>, and when asked about sending data to this site choose <strong>Always Allow</strong>, or the daily automation will stop to ask.</p>
       <div className={'mt-3 flex items-center gap-3 rounded-xl p-3 text-sm ' + (synced ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200' : 'bg-[var(--surface-2)]')}>
@@ -143,7 +158,7 @@ export default function ShortcutGuide() {
     <PageHeader title="Apple Reminders setup" />
     <div className="tt-panel flex items-center gap-3 p-3 pl-4 text-sm">
       <span className="tt-empty-icon !mb-0 !h-9 !w-9 shrink-0"><IconBell size={18} /></span>
-      <p className="min-w-0 flex-1">A daily iPhone Shortcut sends your <strong>pending</strong> reminders. New ones are added once, completed ones disappear. <strong>Read only</strong> here.</p>
+      <p className="min-w-0 flex-1">A daily iPhone Shortcut sends your <strong>pending</strong> reminders. New ones are added once, completed ones disappear. In TaskTimmer you can <strong>complete</strong> them; the same Shortcut applies it on your iPhone.</p>
     </div>
     <div className="tt-segmented flex w-full" role="tablist" aria-label="Setup part">
       {([['shortcut', '1 · Shortcut', shortcutSteps], ['automation', '2 · Automation', automationSteps]] as const).map(([id, label, list]) =>
